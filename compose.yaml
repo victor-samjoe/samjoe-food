@@ -1,0 +1,52 @@
+name: samjoe-foodapp-local
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: foodapp
+      POSTGRES_PASSWORD: foodapp_local_only
+      POSTGRES_DB: foodapp
+    ports:
+      - "127.0.0.1:55432:5432"
+    volumes:
+      - foodapp_postgres:/var/lib/postgresql/data
+      - ./database/migrations:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U foodapp -d foodapp"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    networks: [foodapp_internal]
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "127.0.0.1:56379:6379"
+    volumes:
+      - foodapp_redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    networks: [foodapp_internal]
+  storage:
+    image: minio/minio:RELEASE.2025-09-07T16-13-09Z
+    command: ["server", "/data", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER: foodapp-local
+      MINIO_ROOT_PASSWORD: foodapp-local-only
+    ports:
+      - "127.0.0.1:59000:9000"
+      - "127.0.0.1:59001:9001"
+    volumes:
+      - foodapp_storage:/data
+    networks: [foodapp_internal]
+volumes:
+  foodapp_postgres:
+  foodapp_redis:
+  foodapp_storage:
+networks:
+  foodapp_internal:
+    driver: bridge
+

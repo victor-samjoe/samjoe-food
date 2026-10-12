@@ -1,0 +1,349 @@
+openapi: 3.1.0
+info:
+  title: SamJoE FoodApp API
+  version: 1.0.0
+  description: Contrato inicial para simulação local. Nenhuma integração real é habilitada por padrão.
+servers:
+  - url: http://localhost:3001
+    description: Local
+tags:
+  - name: Public
+  - name: Webhooks
+paths:
+  /v1/auth/login:
+    post:
+      operationId: login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [tenant_slug, email, password]
+              properties:
+                tenant_slug: { type: string }
+                email: { type: string, format: email }
+                password: { type: string, format: password, minLength: 8 }
+      responses:
+        '200':
+          description: Sessão opaca vinculada ao usuário, membership e tenant informados.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [access_token, token_type, expires_in, user, tenant, role]
+                properties:
+                  access_token: { type: string, writeOnly: true }
+                  token_type: { const: Bearer }
+                  expires_in: { type: integer }
+                  user: { type: object }
+                  tenant: { type: object }
+                  role: { enum: [OWNER, ADMIN, OPERATOR, VIEWER] }
+        '401':
+          description: Credenciais ou membership inválidos.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+  /v1/me:
+    get:
+      operationId: getCurrentSession
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Identidade e tenant vinculados à sessão.
+        '401':
+          description: Sessão ausente, revogada ou expirada.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+  /v1/public/stores/{storeSlug}/catalog:
+    get:
+      tags: [Public]
+      operationId: getPublicCatalog
+      parameters:
+        - $ref: '#/components/parameters/StoreSlug'
+      responses:
+        '200':
+          description: Catálogo publicado da loja.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Catalog'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /v1/public/stores/{storeSlug}/delivery-quotes:
+    post:
+      tags: [Public]
+      operationId: createDeliveryQuote
+      parameters:
+        - $ref: '#/components/parameters/StoreSlug'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateDeliveryQuoteInput'
+      responses:
+        '200':
+          description: Cotação calculada e temporária.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliveryQuote'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /v1/public/stores/{storeSlug}/orders:
+    post:
+      tags: [Public]
+      operationId: createOrder
+      parameters:
+        - $ref: '#/components/parameters/StoreSlug'
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema: { type: string, minLength: 16, maxLength: 200 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateOrderInput'
+      responses:
+        '201':
+          description: Pedido criado.
+          headers:
+            Location:
+              schema: { type: string }
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+        '409':
+          description: Chave idempotente reutilizada com conteúdo diferente ou conflito de estoque.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /v1/public/orders/{publicNumber}:
+    get:
+      tags: [Public]
+      operationId: trackOrder
+      parameters:
+        - name: publicNumber
+          in: path
+          required: true
+          schema: { type: string, pattern: '^[A-Z0-9-]{4,30}$' }
+        - name: X-Order-Tracking-Token
+          in: header
+          required: true
+          schema: { type: string, minLength: 24, maxLength: 200 }
+      responses:
+        '200':
+          description: Visão pública e limitada do pedido.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OrderTracking' }
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /v1/webhooks/{provider}:
+    post:
+      tags: [Webhooks]
+      operationId: receiveProviderWebhook
+      parameters:
+        - name: provider
+          in: path
+          required: true
+          schema: { enum: [mercado_pago, evolution] }
+        - name: X-Webhook-Signature
+          in: header
+          required: true
+          schema: { type: string, minLength: 16 }
+        - name: X-Webhook-Request-Id
+          in: header
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 200 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '202':
+          description: Evento autenticado e persistido na inbox para processamento idempotente.
+        '401':
+          description: Assinatura ausente ou inválida.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: opaque
+  parameters:
+    StoreSlug:
+      name: storeSlug
+      in: path
+      required: true
+      schema: { type: string, pattern: '^[a-z0-9]+(?:-[a-z0-9]+)*$', maxLength: 80 }
+  responses:
+    NotFound:
+      description: Recurso não encontrado.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    ValidationError:
+      description: Dados inválidos ou regra comercial não atendida.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+  schemas:
+    Error:
+      type: object
+      additionalProperties: false
+      required: [error]
+      properties:
+        error:
+          type: object
+          additionalProperties: false
+          required: [code, message, request_id]
+          properties:
+            code: { type: string, pattern: '^[a-z0-9_]+$' }
+            message: { type: string }
+            request_id: { type: string, format: uuid }
+            details: { type: array, items: { type: object } }
+    Money:
+      type: object
+      additionalProperties: false
+      required: [amount_cents, currency]
+      properties:
+        amount_cents: { type: integer, minimum: 0 }
+        currency: { type: string, const: BRL }
+    Catalog:
+      type: object
+      additionalProperties: false
+      required: [store, products, version]
+      properties:
+        store:
+          type: object
+          required: [name, slug, timezone]
+          properties:
+            name: { type: string }
+            slug: { type: string }
+            timezone: { type: string, example: America/Sao_Paulo }
+        products:
+          type: array
+          items: { $ref: '#/components/schemas/Product' }
+        version: { type: string }
+    Product:
+      type: object
+      additionalProperties: false
+      required: [id, name, active, variants]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string, minLength: 1, maxLength: 160 }
+        description: { type: [string, 'null'], maxLength: 2000 }
+        active: { type: boolean }
+        image_url: { type: [string, 'null'], format: uri }
+        variants:
+          type: array
+          items: { $ref: '#/components/schemas/Variant' }
+    Variant:
+      type: object
+      additionalProperties: false
+      required: [id, sku, name, price, available]
+      properties:
+        id: { type: string, format: uuid }
+        sku: { type: string, minLength: 1, maxLength: 80 }
+        name: { type: string, minLength: 1, maxLength: 160 }
+        price: { $ref: '#/components/schemas/Money' }
+        available: { type: boolean }
+    AddressInput:
+      type: object
+      additionalProperties: false
+      required: [street, number, district, city, state, postal_code]
+      properties:
+        street: { type: string, minLength: 1, maxLength: 160 }
+        number: { type: string, minLength: 1, maxLength: 30 }
+        complement: { type: [string, 'null'], maxLength: 120 }
+        district: { type: string, minLength: 1, maxLength: 100 }
+        city: { type: string, minLength: 1, maxLength: 100 }
+        state: { type: string, pattern: '^[A-Z]{2}$' }
+        postal_code: { type: string, pattern: '^[0-9]{8}$' }
+        reference: { type: [string, 'null'], maxLength: 240 }
+    CreateDeliveryQuoteInput:
+      type: object
+      additionalProperties: false
+      required: [address]
+      properties:
+        address: { $ref: '#/components/schemas/AddressInput' }
+    DeliveryQuote:
+      type: object
+      additionalProperties: false
+      required: [id, status, fee, expires_at, rule_version]
+      properties:
+        id: { type: string, format: uuid }
+        status: { enum: [AVAILABLE, OUTSIDE_AREA, REVIEW_REQUIRED] }
+        fee: { $ref: '#/components/schemas/Money' }
+        distance_meters: { type: [integer, 'null'], minimum: 0 }
+        duration_seconds: { type: [integer, 'null'], minimum: 0 }
+        expires_at: { type: string, format: date-time }
+        rule_version: { type: string }
+    CreateOrderItemInput:
+      type: object
+      additionalProperties: false
+      required: [variant_id, quantity]
+      properties:
+        variant_id: { type: string, format: uuid }
+        quantity: { type: integer, minimum: 1, maximum: 100 }
+        notes: { type: [string, 'null'], maxLength: 500 }
+    CreateOrderInput:
+      type: object
+      additionalProperties: false
+      required: [customer, fulfillment, items, payment_method]
+      properties:
+        customer:
+          type: object
+          additionalProperties: false
+          required: [name, phone_e164]
+          properties:
+            name: { type: string, minLength: 1, maxLength: 160 }
+            phone_e164: { type: string, pattern: '^\\+[1-9][0-9]{7,14}$' }
+            email: { type: [string, 'null'], format: email }
+        fulfillment: { enum: [DELIVERY, PICKUP] }
+        address: { anyOf: [{ $ref: '#/components/schemas/AddressInput' }, { type: 'null' }] }
+        delivery_quote_id: { type: [string, 'null'], format: uuid }
+        items:
+          type: array
+          minItems: 1
+          maxItems: 100
+          items: { $ref: '#/components/schemas/CreateOrderItemInput' }
+        payment_method: { enum: [CASH, PIX, MERCADO_PAGO] }
+        notes: { type: [string, 'null'], maxLength: 1000 }
+    Order:
+      type: object
+      additionalProperties: false
+      required: [id, public_number, status, items, subtotal, delivery_fee, total, tracking_token]
+      properties:
+        id: { type: string, format: uuid }
+        public_number: { type: string }
+        status: { $ref: '#/components/schemas/OrderStatus' }
+        items: { type: array, items: { type: object } }
+        subtotal: { $ref: '#/components/schemas/Money' }
+        delivery_fee: { $ref: '#/components/schemas/Money' }
+        total: { $ref: '#/components/schemas/Money' }
+        tracking_token: { type: string, minLength: 24, writeOnly: true }
+    OrderTracking:
+      type: object
+      additionalProperties: false
+      required: [public_number, status, updated_at]
+      properties:
+        public_number: { type: string }
+        status: { $ref: '#/components/schemas/OrderStatus' }
+        updated_at: { type: string, format: date-time }
+        estimated_at: { type: [string, 'null'], format: date-time }
+    OrderStatus:
+      enum: [PAYMENT_PENDING, PAYMENT_FAILED, NEW, CONFIRMED, IN_PREPARATION, READY, READY_FOR_PICKUP, OUT_FOR_DELIVERY, COMPLETED, CANCELLED]

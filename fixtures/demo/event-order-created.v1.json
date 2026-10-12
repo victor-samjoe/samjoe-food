@@ -1,0 +1,20 @@
+{
+  "specversion": "1.0",
+  "id": "10000000-0000-4000-8000-000000000001",
+  "type": "foodapp.order.created.v1",
+  "source": "urn:samjoe:foodapp:api",
+  "tenant_id": "10000000-0000-4000-8000-000000000010",
+  "time": "2026-10-10T18:00:00.000Z",
+  "subject": "order/10000000-0000-4000-8000-000000000020",
+  "correlation_id": "10000000-0000-4000-8000-000000000030",
+  "causation_id": null,
+  "actor": { "type": "customer", "id": "10000000-0000-4000-8000-000000000040" },
+  "data": {
+    "order_id": "10000000-0000-4000-8000-000000000020",
+    "public_number": "DH-000001",
+    "status": "NEW",
+    "currency": "BRL",
+    "total_cents": 2850
+  }
+}
+

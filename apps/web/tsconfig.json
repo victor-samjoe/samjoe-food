@@ -1,0 +1,15 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "jsx": "preserve",
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "lib": ["dom", "dom.iterable", "esnext"],
+    "noEmit": true,
+    "incremental": true,
+    "plugins": [{ "name": "next" }]
+  },
+  "include": ["next-env.d.ts", ".next/types/**/*.ts", ".cloudflare/types/**/*.d.ts", "app/**/*.ts", "app/**/*.tsx", "vite.config.ts", "cloudflare.config.ts"],
+  "exclude": ["node_modules"]
+}
+

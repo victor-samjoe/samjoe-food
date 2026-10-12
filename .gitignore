@@ -1,0 +1,12 @@
+node_modules/
+dist/
+.next/
+.env
+.env.*
+!.env.example
+coverage/
+*.log
+*.tsbuildinfo
+.runlogs/
+samjoe_sales_engine_spec_v1.0.zip
+

@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.foodapp.samjoe.com.br/events/sales-engine-order-created.v1.schema.json",
+  "title": "FoodApp to Sales Engine — Order Created v1",
+  "allOf": [
+    { "$ref": "./event-envelope.v1.schema.json" },
+    {
+      "properties": {
+        "type": { "const": "foodapp.order.created.v1" },
+        "data": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["order_id", "public_number", "status", "currency", "total_cents"],
+          "properties": {
+            "order_id": { "type": "string", "format": "uuid" },
+            "public_number": { "type": "string", "minLength": 1, "maxLength": 30 },
+            "status": { "const": "NEW" },
+            "currency": { "const": "BRL" },
+            "total_cents": { "type": "integer", "minimum": 0 }
+          }
+        }
+      }
+    }
+  ]
+}
+

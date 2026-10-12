@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.foodapp.samjoe.com.br/events/envelope.v1.schema.json",
+  "title": "SamJoE FoodApp Event Envelope v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["specversion", "id", "type", "source", "tenant_id", "time", "subject", "correlation_id", "data"],
+  "properties": {
+    "specversion": { "const": "1.0" },
+    "id": { "type": "string", "format": "uuid" },
+    "type": { "type": "string", "pattern": "^foodapp\\.[a-z0-9_]+\\.[a-z0-9_]+\\.v[1-9][0-9]*$" },
+    "source": { "type": "string", "pattern": "^urn:samjoe:foodapp:[a-z0-9_-]+$" },
+    "tenant_id": { "type": "string", "format": "uuid" },
+    "time": { "type": "string", "format": "date-time" },
+    "subject": { "type": "string", "minLength": 1, "maxLength": 200 },
+    "correlation_id": { "type": "string", "format": "uuid" },
+    "causation_id": { "type": ["string", "null"], "format": "uuid" },
+    "actor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type"],
+      "properties": {
+        "type": { "enum": ["customer", "user", "system", "integration", "admin"] },
+        "id": { "type": ["string", "null"], "format": "uuid" }
+      }
+    },
+    "data": { "type": "object" }
+  }
+}
+

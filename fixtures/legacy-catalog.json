@@ -1,0 +1,79 @@
+{
+  "schema_version": "1",
+  "tenant_slug": "doce-horizonte-demo",
+  "store_slug": "doce-horizonte-centro",
+  "exported_at": "2026-10-10T00:00:00.000Z",
+  "source": "legacy-sheets",
+  "categories": [
+    {
+      "legacy_id": "CAT-001",
+      "name": "Bolos no pote",
+      "sort_order": 1,
+      "products": [
+        {
+          "produto_id": "P001",
+          "name": "Bolo no pote Aurora",
+          "description": "Massa de chocolate e creme de baunilha.",
+          "available": true,
+          "variants": [
+            {
+              "sku": "DEMO-AURORA-250",
+              "name": "250 ml",
+              "price_cents": 1200,
+              "attributes": { "size": "250 ml", "flavor": "chocolate e baunilha" }
+            }
+          ]
+        },
+        {
+          "produto_id": "P002",
+          "name": "Bolo no pote Jardim",
+          "description": "Massa branca e creme de frutas vermelhas.",
+          "available": true,
+          "variants": [
+            {
+              "sku": "DEMO-JARDIM-250",
+              "name": "250 ml",
+              "price_cents": 1350,
+              "attributes": { "size": "250 ml", "flavor": "frutas vermelhas" }
+            }
+          ]
+        },
+        {
+          "produto_id": "P003",
+          "name": "Bolo no pote Estrela",
+          "description": "Massa de cenoura e cobertura de brigadeiro.",
+          "available": false,
+          "variants": [
+            {
+              "sku": "DEMO-ESTRELA-250",
+              "name": "250 ml",
+              "price_cents": 1400,
+              "attributes": { "size": "250 ml", "flavor": "cenoura com brigadeiro" }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "legacy_id": "CAT-002",
+      "name": "Bebidas",
+      "sort_order": 2,
+      "products": [
+        {
+          "produto_id": "P004",
+          "name": "Suco de maracujá",
+          "description": "Suco natural de maracujá 300 ml.",
+          "available": true,
+          "variants": [
+            {
+              "sku": "DEMO-SUCO-MARACUJA-300",
+              "name": "300 ml",
+              "price_cents": 800,
+              "attributes": { "size": "300 ml", "flavor": "maracujá" }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
