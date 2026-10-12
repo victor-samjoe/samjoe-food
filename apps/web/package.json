@@ -4,14 +4,17 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "prebuild": "npm run build -w @foodapp/api",
     "build": "next build",
     "typecheck": "tsc --noEmit",
     "dev:vinext": "vite dev --port 3001",
+    "prebuild:vinext": "npm run build -w @foodapp/api",
     "build:vinext": "vite build",
     "start:vinext": "vite preview",
     "deploy:vinext": "vinext-cloudflare deploy"
   },
   "dependencies": {
+    "@foodapp/api": "0.1.0",
     "@vinext/cloudflare": "^1.1.0",
     "next": "^16.0.0",
     "react": "^19.2.0",

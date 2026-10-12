@@ -23,7 +23,11 @@ Cloudflare DNS/WAF
 
 O verificador do `vinext` classificou o frontend como 100% compatível, e as builds Next.js e Cloudflare passaram. O adaptador continua em beta e a auditoria de dependências encontrou alertas transitivos altos; portanto ele está aprovado para homologação, mas ainda não para o corte de produção. Vercel Pro permanece como contingência caso esses riscos não sejam resolvidos ou formalmente aceitos.
 
-O Fastify não será tratado como processo persistente. As rotas serão adaptadas para handlers serverless mantendo regras, transações, contratos e testes. BullMQ/Redis serão removidos do caminho de produção; tarefas periódicas migrarão para funções SQL idempotentes executadas pelo Supabase Cron.
+O Fastify não será tratado como processo persistente. Em 2026-10-12, o teste dentro do runtime real do Workers mostrou que o Fastify compila schemas com `eval/new Function` durante a inicialização da rota, operação bloqueada pelo isolamento do Cloudflare. O build isolado passava, mas a primeira chamada da API retornava erro 500.
+
+A decisão implementada foi manter o Fastify no servidor Node e nos testes existentes, mas usar no Worker um adaptador HTTP nativo, sem geração dinâmica de código. O adaptador registra os mesmos handlers, schemas, regras SQL e transações. No smoke test do runtime Cloudflare, página e loja responderam 200, catálogo real do Supabase respondeu 200, acesso administrativo sem token respondeu 401 e entradas inválidas responderam 400.
+
+BullMQ/Redis serão removidos do caminho de produção; tarefas periódicas migrarão para funções SQL idempotentes executadas pelo Supabase Cron.
 
 ## Domínios
 
@@ -35,7 +39,7 @@ O Fastify não será tratado como processo persistente. As rotas serão adaptada
 
 - nenhuma dependência de energia ou internet local;
 - permanência nas camadas gratuitas durante o piloto, sem SLA;
-- necessidade de adaptar API e jobs ao modelo serverless;
+- API adaptada ao runtime Workers sem duplicar regras de domínio; novos schemas HTTP precisam permanecer dentro do subconjunto validado pelo adaptador nativo;
 - necessidade de limitar conexões e usar o pooler do Supabase;
 - novo ciclo obrigatório de testes de concorrência, idempotência e isolamento;
 - Vercel Pro permanece como plano de contingência se a adaptação Cloudflare não atingir os critérios de aceite.

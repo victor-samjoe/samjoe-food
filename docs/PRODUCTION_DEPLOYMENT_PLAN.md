@@ -98,7 +98,7 @@ Next.js + endpoints HTTP adaptados para serverless
 ### 3.1 O que cada serviço faz
 
 - **Supabase:** hospeda PostgreSQL, arquivos/imagens e tarefas agendadas.
-- **Cloudflare Workers:** executa o Next.js e os endpoints HTTP sem depender do notebook. O adaptador será escolhido após o teste de compatibilidade; a documentação atual recomenda `vinext` para Next.js 16, mas ele ainda está em beta.
+- **Cloudflare Workers:** executa o Next.js e os endpoints HTTP sem depender do notebook. O `vinext` foi validado para o frontend; a API usa um adaptador HTTP nativo do Worker que reaproveita os handlers e transações existentes sem carregar o runtime Fastify.
 - **Cloudflare DNS:** continua administrando os hostnames do domínio registrado no Registro.br.
 - **Supabase Cron/pg_cron:** assume expiração de reservas, reconciliação e consumo controlado da outbox que hoje dependem do worker BullMQ.
 - **Supabase Edge Functions:** opção para webhooks ou integrações curtas que não devam ficar dentro do Next.js.
@@ -110,7 +110,7 @@ Cloudflare Tunnel não será usado na aplicação principal porque não haverá 
 Para cumprir o requisito de permanecer online sem o notebook, o primeiro deploy exige uma adaptação serverless antes do cutover:
 
 - publicar o Next.js com o adaptador validado para Cloudflare Workers;
-- adaptar as rotas Fastify para route handlers do Next.js ou para um Worker HTTP compatível;
+- executar as rotas por meio do adaptador HTTP nativo já validado no runtime Workers;
 - substituir BullMQ/Redis por funções SQL idempotentes agendadas no Supabase Cron;
 - mover integrações assíncronas mais complexas para Edge Functions ou filas gerenciadas quando forem ativadas;
 - usar conexão apropriada para serverless e limitar conexões ao PostgreSQL.
@@ -131,13 +131,13 @@ Decisão inicial:
 
 Confirmar e registrar em ADR:
 
-- [ ] A aplicação será executada sem dependência do notebook.
-- [ ] O primeiro endereço continuará sendo `app.confeitaria.samjoe.com.br` durante a migração.
-- [ ] A plataforma também suportará `food.samjoe.com.br/loja/{slug}` e domínios próprios.
-- [ ] O banco será Supabase PostgreSQL.
+- [x] A aplicação será executada sem dependência do notebook.
+- [x] O primeiro endereço continuará sendo `app.confeitaria.samjoe.com.br` durante a migração.
+- [x] A plataforma também suportará `food.samjoe.com.br/loja/{slug}` e domínios próprios.
+- [x] O banco será Supabase PostgreSQL.
 - [ ] As imagens ficarão no Supabase Storage.
-- [ ] BullMQ/Redis serão removidos do caminho de produção e substituídos por Supabase Cron.
-- [ ] Cloudflare Workers será o alvo gratuito; Vercel exigirá Pro.
+- [x] BullMQ/Redis serão removidos do caminho de produção e substituídos por Supabase Cron.
+- [x] Cloudflare Workers será o alvo gratuito; Vercel exigirá Pro.
 - [ ] Pagamentos online e WhatsApp permanecerão desativados até homologação específica.
 - [ ] O plano gratuito será tratado como piloto sem SLA.
 - [ ] Haverá orçamento ou plano de migração caso o piloto passe a ser operação crítica.
@@ -221,10 +221,8 @@ tenants/{tenant_id}/stores/{store_id}/products/{product_id}/{arquivo}
 
 1. Executar o verificador `vinext check` recomendado pela Cloudflare para Next.js 16 e comparar os bloqueios com OpenNext. **Resultado em 2026-10-11:** 100% compatível; builds Next.js e vinext aprovadas.
 2. Criar `wrangler.jsonc` com ambientes separados para preview e produção.
-3. Adaptar a inicialização do Fastify: nenhuma função serverless deve chamar `listen()` ou depender de processo permanente.
-4. Escolher uma das implementações HTTP:
-   - mover as rotas para route handlers do Next.js; ou
-   - criar um Worker de API separado com as mesmas regras de domínio.
+3. [x] Remover a dependência do processo Fastify no Worker. O teste real comprovou que `inject()` não é suficiente porque a compilação dinâmica dos schemas é bloqueada no runtime.
+4. [x] Executar a camada HTTP por adaptador nativo do Worker, mantendo os mesmos handlers, schemas interpretados, regras de domínio e SQL.
 5. Preservar as transações PostgreSQL do checkout em uma única invocação.
 6. Usar o transaction pooler do Supabase e limitar o pool por instância.
 7. Remover Redis/BullMQ do runtime de produção.
@@ -235,6 +233,8 @@ tenants/{tenant_id}/stores/{store_id}/products/{product_id}/{arquivo}
 10. Manter outbox/inbox no PostgreSQL; cada consumidor deve possuir lock, tentativas e idempotência.
 11. Confirmar que nenhum handler depende de filesystem persistente ou estado em memória.
 12. Executar novamente testes de concorrência, idempotência, pagamentos e isolamento de tenant no ambiente remoto.
+
+> Resultado de 2026-10-12: 32 testes da API aprovados; builds Next.js e vinext aprovados; smoke no runtime Cloudflare aprovado para `/`, `/loja/samjoe-confeitaria`, catálogo Supabase (200), admin sem sessão (401) e payloads inválidos (400). O chunk da API caiu de aproximadamente 760 KB para 157 KB ao retirar o runtime Fastify do Worker.
 
 ### Etapa 7 — Publicar na Cloudflare
 
