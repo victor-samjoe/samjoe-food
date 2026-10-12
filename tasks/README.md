@@ -19,6 +19,8 @@ Este diretório organiza a substituição incremental do sistema legado em `E:\s
 13. `013_CUTOVER_DOMINIO_SAMJOE_CONFEITARIA.md`
 14. `014_SALES_ENGINE_IDENTIDADE_CONTATOS_E_CONSENTIMENTOS.md`
 15. `015_MANUTENCAO_CI_GITHUB_ACTIONS.md`
+16. `016_ONBOARDING_AUTOMATIZADO_DE_TENANTS.md`
+17. `017_SAMJOE_CONTROL_CENTER.md`
 
 ## Regras de execução
 
@@ -41,4 +43,6 @@ Este diretório organiza a substituição incremental do sistema legado em `E:\s
 - Cutover do domínio: **bloqueado pelo aceite da Tarefa 012**.
 - Sales Engine: **fundação publicada; identidade, contatos e consentimentos na Tarefa 014**.
 - Manutenção do CI: **planejada na Tarefa 015**.
+- Onboarding de tenants: **MVP por comando na Tarefa 016**.
+- Control Center da SamJoE: **planejamento na Tarefa 017**.
 

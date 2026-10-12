@@ -16,7 +16,7 @@ Validar o fluxo completo da SamJoE Confeitaria no ambiente publicado antes de al
 
 ## Escopo
 
-- [ ] Criar ou confirmar usuário OWNER de homologação com troca obrigatória de senha.
+- [ ] Criar ou confirmar usuário OWNER pelo fluxo da Tarefa 016, com troca obrigatória de senha.
 - [ ] Validar login, logout, sessão expirada e recuperação de acesso.
 - [ ] Confirmar isolamento do tenant `samjoe-confeitaria` com teste negativo de outro tenant.
 - [ ] Validar catálogo público, imagens, preços, disponibilidade e produtos arquivados.
