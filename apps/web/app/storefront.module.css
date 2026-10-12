@@ -64,13 +64,14 @@
 .footer { min-height: 78px; display: flex; align-items: center; justify-content: space-between; padding: 0 clamp(24px, 7vw, 100px); background: #2f2420; color: #a99a91; font-size: 11px; text-transform: uppercase; letter-spacing: .12em; }
 .mobileCart { display: none; }
 .backdrop { position: fixed; inset: 0; border: 0; background: rgba(38,25,20,.52); z-index: 50; backdrop-filter: blur(2px); }
-.drawer { position: fixed; right: 0; top: 0; bottom: 0; width: min(480px, 100%); z-index: 51; background: #fcfaf7; box-shadow: -20px 0 60px rgba(47,31,24,.2); display: flex; flex-direction: column; overflow-y: auto; animation: slideIn .25s ease-out; }
-@keyframes slideIn { from { transform: translateX(100%); } }
+.drawer { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); width: min(520px, calc(100vw - 20px)); max-height: min(88vh, 720px); z-index: 51; background: #fcfaf7; box-shadow: 0 28px 80px rgba(47,31,24,.3); display: flex; flex-direction: column; overflow: hidden; border-radius: 20px; animation: cartPop .22s cubic-bezier(.2,.8,.2,1); }
+@keyframes cartPop { from { opacity: 0; transform: translate(-50%, calc(-50% - 14px)) scale(.97); } to { opacity: 1; transform: translate(-50%, -50%) scale(1); } }
 .drawerHeader { display: flex; justify-content: space-between; align-items: center; padding: 25px 26px 18px; border-bottom: 1px solid #e6dbd2; }
 .drawerHeader h2 { margin: 3px 0 0; font: 500 31px Georgia, serif; }.drawerHeader button { border: 0; background: transparent; font-size: 30px; color: #705d53; cursor: pointer; }
 .emptyCart { margin: auto; text-align: center; color: #99867b; }.emptyCart span { font-size: 50px; color: #d5c3b7; }
-.cartList { padding: 8px 25px; flex: 1; }.cartItem { display: grid; grid-template-columns: 60px 1fr auto; gap: 13px; align-items: center; padding: 17px 0; border-bottom: 1px solid #e7ddd4; }
-.cartThumb { height: 68px; display: grid; place-items: center; border-radius: 3px; background: #e5b6aa; color: white; font: 700 25px Georgia, serif; }
+.cartList { padding: 8px 25px; flex: 1; overflow-y: auto; }.cartItem { display: grid; grid-template-columns: 60px 1fr auto; gap: 13px; align-items: center; padding: 17px 0; border-bottom: 1px solid #e7ddd4; }
+.cartThumb { height: 68px; display: grid; place-items: center; border-radius: 8px; background: #e5b6aa; color: white; font: 700 25px Georgia, serif; overflow: hidden; }
+.cartThumbImg { width: 100%; height: 100%; object-fit: cover; display: block; }
 .cartDetails { display: grid; gap: 3px; }.cartDetails strong { font: 600 16px Georgia, serif; }.cartDetails small { color: #927f74; }.cartDetails span { color: #9f3f35; font-weight: 700; font-size: 13px; }
 .quantity { display: flex; align-items: center; gap: 8px; }.quantity button { width: 27px; height: 27px; border: 1px solid #d9c9bd; background: white; color: #75483e; cursor: pointer; }.quantity b { min-width: 12px; text-align: center; }
 .cartFooter { border-top: 1px solid #e3d6cc; padding: 22px 26px 28px; background: white; }.cartFooter > div { display: flex; justify-content: space-between; font-size: 17px; }.cartFooter > div strong { font-size: 21px; color: #8e3c33; }.cartFooter small { display: block; color: #99867c; margin: 6px 0 17px; }
@@ -94,7 +95,7 @@
   .catalog { padding: 60px 16px 90px; }.catalogHeading h2 { font-size: 35px; }.chips { flex-wrap: nowrap; overflow-x: auto; margin-right: -16px; padding-right: 16px; }.chip, .chipActive { white-space: nowrap; }.productGrid { grid-template-columns: 1fr; }.productVisual { height: 180px; }
   .promise { margin: 0 16px 70px; padding: 22px; }.footer { flex-direction: column; justify-content: center; gap: 8px; text-align: center; }
   .mobileCart { display: grid; grid-template-columns: 30px 1fr auto; align-items: center; position: fixed; left: 12px; right: 12px; bottom: 12px; z-index: 25; padding: 12px 15px; border: 0; border-radius: 4px; background: #38241f; color: white; box-shadow: 0 10px 35px rgba(37,20,15,.3); }.mobileCart b { width: 26px; height: 26px; display: grid; place-items: center; background: #e7b55f; color: #38241f; border-radius: 50%; }.mobileCart span { text-align: left; padding-left: 10px; }
-  .drawerHeader { padding: 20px; }.cartList, .checkout { padding-left: 18px; padding-right: 18px; }.cartFooter { padding: 20px 18px 24px; }
+  .drawerHeader { padding: 18px 20px; }.cartList, .checkout { padding-left: 18px; padding-right: 18px; }.cartFooter { padding: 18px 18px 22px; }.drawer{max-height:min(94vh,640px);width:min(520px,calc(100vw - 12px))}
 }
 
 /* Identidade visual configurada pelo painel Minha loja. */

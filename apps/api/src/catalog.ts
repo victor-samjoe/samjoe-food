@@ -75,6 +75,7 @@ export function registerCatalogRoutes(app: FastifyInstance, pool: Database) {
         ON p.tenant_id = s.tenant_id
        AND p.store_id = s.id
        AND p.is_active = true
+       AND p.is_archived = false
       LEFT JOIN categories c
         ON c.tenant_id = p.tenant_id
        AND c.id = p.category_id
@@ -210,7 +211,7 @@ export function registerCatalogRoutes(app: FastifyInstance, pool: Database) {
           JOIN orders o ON o.customer_id = c.id AND o.tenant_id = c.tenant_id
           JOIN order_items oi ON oi.order_id = o.id AND oi.tenant_id = o.tenant_id
           JOIN product_variants v ON v.id = oi.variant_id AND v.tenant_id = oi.tenant_id
-          JOIN products p ON p.id = v.product_id AND p.tenant_id = v.tenant_id AND p.is_active = true
+          JOIN products p ON p.id = v.product_id AND p.tenant_id = v.tenant_id AND p.is_active = true AND p.is_archived = false
           WHERE c.tenant_id = $1 AND c.phone_e164 = $2 AND o.store_id = $3
             AND o.status NOT IN ('CANCELLED', 'REFUNDED')
           GROUP BY p.id, p.name, p.description, p.cover_image_url, v.id, v.price_cents, v.currency
@@ -235,7 +236,7 @@ export function registerCatalogRoutes(app: FastifyInstance, pool: Database) {
           FROM order_items oi
           JOIN orders o ON o.id = oi.order_id AND o.tenant_id = oi.tenant_id
           JOIN product_variants v ON v.id = oi.variant_id AND v.tenant_id = oi.tenant_id
-          JOIN products p ON p.id = v.product_id AND p.tenant_id = v.tenant_id AND p.is_active = true
+          JOIN products p ON p.id = v.product_id AND p.tenant_id = v.tenant_id AND p.is_active = true AND p.is_archived = false
           WHERE oi.tenant_id = $1 AND o.store_id = $2
             AND o.status NOT IN ('CANCELLED', 'REFUNDED')
             ${excludeClause}

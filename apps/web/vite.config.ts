@@ -16,6 +16,10 @@ export default defineConfig({
       },
     }),
   ],
+  environments: {
+    rsc: { build: { rollupOptions: { external: ["cloudflare:workers"] } } },
+    ssr: { build: { rollupOptions: { external: ["cloudflare:workers"] } } },
+  },
   css: {
     modules: {
       generateScopedName(name: string, filename: string) {

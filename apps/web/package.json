@@ -6,12 +6,12 @@
     "dev": "next dev",
     "prebuild": "npm run build -w @foodapp/api",
     "build": "next build",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "next typegen && tsc --noEmit",
     "dev:vinext": "vite dev --port 3001",
     "prebuild:vinext": "npm run build -w @foodapp/api",
     "build:vinext": "vite build",
     "start:vinext": "vite preview",
-    "deploy:vinext": "vinext-cloudflare deploy"
+    "deploy:vinext": "npm run build -w @foodapp/api && vinext-cloudflare deploy"
   },
   "dependencies": {
     "@foodapp/api": "0.1.0",

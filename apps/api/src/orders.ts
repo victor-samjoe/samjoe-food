@@ -59,7 +59,7 @@ export function registerOrderRoutes(app: FastifyInstance, database: Transactiona
           type: 'object', additionalProperties: false,
           properties: {
             status: { type: 'string', maxLength: 30 },
-            limit: { type: 'integer', minimum: 1, maximum: 100, default: 30 },
+            limit: { type: 'integer', minimum: 1, maximum: 500, default: 30 },
             offset: { type: 'integer', minimum: 0, default: 0 },
           },
         },

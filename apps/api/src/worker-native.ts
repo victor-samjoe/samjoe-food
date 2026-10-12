@@ -161,12 +161,22 @@ registerOrderRoutes(compatibleRouter, contextualDatabase);
 registerDeliveryRoutes(compatibleRouter, contextualDatabase);
 registerPaymentRoutes(compatibleRouter, contextualDatabase);
 
-const defaultClientFactory: ApiClientFactory = (connectionString) => new Client({ connectionString });
+const defaultClientFactory: ApiClientFactory = (connectionString) => {
+  return new Client({
+    connectionString,
+    connectionTimeoutMillis: 10_000,
+  });
+};
 export type InjectApiRequestOptions = { connectionString: string; path: string; request: Request; clientFactory?: ApiClientFactory };
 
 export async function injectApiRequest({ connectionString, path, request, clientFactory = defaultClientFactory }: InjectApiRequestOptions) {
   const client = clientFactory(connectionString);
-  await client.connect();
+  try {
+    await client.connect();
+  } catch (error) {
+    console.error('Worker database connection failed', error);
+    return Response.json({ error: { code: 'db_unavailable', message: 'Serviço temporariamente indisponível.' } }, { status: 503 });
+  }
   try {
     return await clientContext.run(client, async () => {
       const url = new URL(request.url);
@@ -203,7 +213,11 @@ export async function injectApiRequest({ connectionString, path, request, client
       }
     });
   } finally {
-    await client.end();
+    try {
+      await client.end();
+    } catch (error) {
+      console.warn('Worker database client close failed', error);
+    }
   }
 }
 

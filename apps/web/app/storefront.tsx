@@ -7,9 +7,9 @@ type Money = { amount_cents: number; currency: string };
 type Variant = { id: string; sku: string; name: string; price: Money; available: boolean };
 type Product = { id: string; name: string; description: string | null; image_url: string | null; variants: Variant[] };
 type Category = { id: string | null; name: string | null; slug: string | null; products: Product[] };
-type StorefrontConfig = { brand_subtitle:string; hero_eyebrow:string; hero_title:string; hero_description:string; primary_color:string; accent_color:string; background_color:string; hero_image_enabled:boolean; hero_image_url:string|null; hero_image_size:'SMALL'|'MEDIUM'|'LARGE'; hero_display_mode:'CORNER'|'FULLSCREEN'|'FLAME'|'CAROUSEL'; hero_images:string[]; hero_section_size:'COMPACT'|'NORMAL'|'TALL'; hero_image_fit:'FILL'|'FIT'; logo_url:string|null; font_family:'CLASSIC'|'MODERN'|'ROUNDED'; text_case:'AS_TYPED'|'UPPERCASE' };
+type StorefrontConfig = { brand_subtitle:string; hero_eyebrow:string; hero_title:string; hero_description:string; primary_color:string; accent_color:string; background_color:string; hero_image_enabled:boolean; hero_image_url:string|null; hero_image_size:'SMALL'|'MEDIUM'|'LARGE'; hero_display_mode:'CORNER'|'FULLSCREEN'|'FLAME'|'CAROUSEL'; hero_images:string[]; hero_section_size:'COMPACT'|'NORMAL'|'TALL'; hero_image_fit:'FILL'|'FIT'; logo_url:string|null; font_family:'CLASSIC'|'MODERN'|'ROUNDED'; text_case:'AS_TYPED'|'UPPERCASE'; hero_bg_type?:'GRADIENT'|'COLOR'|'IMAGE'; hero_bg_color?:string|null; hero_bg_image_url?:string|null };
 type Catalog = { store: { name: string; slug: string; timezone: string; storefront:Partial<StorefrontConfig> }; categories: Category[]; version: string };
-type CartItem = { productId: string; productName: string; variant: Variant; quantity: number };
+type CartItem = { productId: string; productName: string; imageUrl: string | null; variant: Variant; quantity: number };
 type Fulfillment = 'PICKUP' | 'DELIVERY';
 type PaymentMethod = 'CASH' | 'PIX' | 'MERCADO_PAGO';
 type CheckoutForm = {
@@ -61,12 +61,33 @@ export default function Storefront({ storeSlug }: { storeSlug: string }) {
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [suggestionsPersonalized, setSuggestionsPersonalized] = useState(false);
   const [phoneLoading, setPhoneLoading] = useState(false);
-  const [showIntro, setShowIntro] = useState(true);
+  const [introDone, setIntroDone] = useState(false);
   const [mounted, setMounted] = useState(false);
   const phoneTimerRef = useRef<ReturnType<typeof setTimeout>|null>(null);
   const [cachedBrand, setCachedBrand] = useState<{logoUrl:string|null;storeName:string|null}>({logoUrl:null,storeName:null});
-  useEffect(()=>{ setMounted(true); setCachedBrand(readCache(cacheKey)); },[cacheKey]);
-  const introOnDone = useCallback(()=>setShowIntro(false),[]);
+  useEffect(()=>{
+    setMounted(true);
+    setCachedBrand(readCache(cacheKey));
+    const urlPhone=new URLSearchParams(window.location.search).get('phone');
+    if(urlPhone){
+      const normalized=normalizeBRPhone(urlPhone);
+      setForm(current=>({...current,phone:normalized}));
+      void(async()=>{
+        try{
+          const result=await jsonRequest<{found:boolean;name?:string;address?:Record<string,unknown>|null}>(`/api/store/${encodedStoreSlug}/customers/lookup?phone=${encodeURIComponent(normalized)}`);
+          if(result.found){
+            setForm(current=>({...current,...(result.name?{name:result.name}:{})}));
+            const addr=result.address as Record<string,string>|null;
+            if(addr)setForm(current=>({...current,street:addr.street??current.street,number:addr.number??current.number,district:addr.district??current.district,city:addr.city??current.city,state:addr.state??current.state,postalCode:addr.postal_code??current.postalCode}));
+            const sugData=await jsonRequest<{personalized:boolean;suggestions:Suggestion[]}>(`/api/store/${encodedStoreSlug}/suggestions?phone=${encodeURIComponent(normalized)}`);
+            setSuggestions(sugData.suggestions);setSuggestionsPersonalized(sugData.personalized);
+          }
+        }catch{}
+      })();
+    }
+  },[cacheKey,encodedStoreSlug]);
+  const introOnDone = useCallback(()=>setIntroDone(true),[]);
+  const showIntro = mounted && (!introDone || loading);
 
   const loadCatalog = useCallback(async () => {
     setLoading(true);
@@ -131,6 +152,7 @@ export default function Storefront({ storeSlug }: { storeSlug: string }) {
   const subtotal = cartItems.reduce((sum, item) => sum + item.variant.price.amount_cents * item.quantity, 0);
   const storefront={...defaultStorefront,...(catalog?.store.storefront??{})};
   const storeName=catalog?.store.name??cachedBrand.storeName??'SamJoE Food';
+  const heroBgStyle=useMemo(():CSSProperties|undefined=>{if(storefront.hero_bg_type==='IMAGE'&&storefront.hero_bg_image_url)return{backgroundImage:`url(${storefront.hero_bg_image_url})`,backgroundSize:'cover',backgroundPosition:'center'};if(storefront.hero_bg_type==='COLOR'&&storefront.hero_bg_color)return{background:storefront.hero_bg_color};return undefined;},[storefront.hero_bg_type,storefront.hero_bg_image_url,storefront.hero_bg_color]);
   const storefrontStyle={'--store-primary':storefront.primary_color,'--store-accent':storefront.accent_color,'--store-background':storefront.background_color,'--store-font':storeFont(storefront.font_family),'--hero-fit':storefront.hero_image_fit==='FIT'?'contain':'cover'} as CSSProperties;
   const heroImages = storefront.hero_images?.length ? storefront.hero_images : (storefront.hero_image_url ? [storefront.hero_image_url] : []);
 
@@ -141,6 +163,7 @@ export default function Storefront({ storeSlug }: { storeSlug: string }) {
       [variant.id]: {
         productId: product.id,
         productName: product.name,
+        imageUrl: product.image_url,
         variant,
         quantity: (current[variant.id]?.quantity ?? 0) + 1,
       },
@@ -204,7 +227,7 @@ export default function Storefront({ storeSlug }: { storeSlug: string }) {
 
   return (
     <>
-      {mounted&&showIntro&&<StoreIntro storeName={cachedBrand.storeName} logoUrl={cachedBrand.logoUrl} onDone={introOnDone}/>}
+      {showIntro&&<StoreIntro storeName={cachedBrand.storeName} logoUrl={cachedBrand.logoUrl} onDone={introOnDone} ready={!loading}/>}
     <main className={styles.page} style={storefrontStyle} data-case={storefront.text_case}>
       <header className={styles.header}>
         <a className={styles.brand} href="#inicio" aria-label={`${storeName}, início`}>
@@ -216,7 +239,7 @@ export default function Storefront({ storeSlug }: { storeSlug: string }) {
         </button>
       </header>
 
-      <section className={`${styles.hero} ${!storefront.hero_image_enabled?styles.heroWithoutImage:''} ${heroSectionClass(storefront.hero_section_size)} ${storefront.hero_image_enabled&&storefront.hero_display_mode==='FULLSCREEN'?styles.heroFullscreen:''}`} id="inicio">
+      <section className={`${styles.hero} ${!storefront.hero_image_enabled?styles.heroWithoutImage:''} ${heroSectionClass(storefront.hero_section_size)} ${storefront.hero_image_enabled&&storefront.hero_display_mode==='FULLSCREEN'?styles.heroFullscreen:''}`} id="inicio" style={heroBgStyle}>
         {storefront.hero_image_enabled&&storefront.hero_display_mode==='FULLSCREEN'&&heroImages[0]&&<img className={styles.heroFullscreenBg} src={heroImages[0]} alt="" aria-hidden="true"/>}
         <div className={styles.heroCopy}>
           <span className={styles.eyebrow}>{storefront.hero_eyebrow}</span>
@@ -264,7 +287,7 @@ export default function Storefront({ storeSlug }: { storeSlug: string }) {
           <div className={styles.drawerHeader}><div><span className={styles.kicker}>SEU PEDIDO</span><h2>Carrinho</h2></div><button onClick={() => { setCartOpen(false); setCheckoutOpen(false); }} aria-label="Fechar">×</button></div>
           {cartItems.length === 0 ? <div className={styles.emptyCart}><span>◇</span><p>Seu carrinho está vazio.</p></div> : <>
             <div className={styles.cartList}>{cartItems.map(item => <div className={styles.cartItem} key={item.variant.id}>
-              <div className={styles.cartThumb}>{item.productName.slice(0, 1)}</div>
+              <div className={styles.cartThumb}>{item.imageUrl?<img src={item.imageUrl} alt="" className={styles.cartThumbImg} aria-hidden="true"/>:item.productName.slice(0,1)}</div>
               <div className={styles.cartDetails}><strong>{item.productName}</strong><small>{item.variant.name}</small><span>{money(item.variant.price.amount_cents)}</span></div>
               <div className={styles.quantity}><button onClick={() => changeQuantity(item.variant.id, -1)}>−</button><b>{item.quantity}</b><button onClick={() => changeQuantity(item.variant.id, 1)}>+</button></div>
             </div>)}</div>
@@ -406,17 +429,17 @@ function SuggestionCard({ suggestion, onAdd }: { suggestion: Suggestion; onAdd: 
   </article>;
 }
 
-function StoreIntro({ storeName, logoUrl, onDone }: { storeName: string | null; logoUrl: string | null; onDone: () => void }) {
+function StoreIntro({ storeName, logoUrl, onDone, ready }: { storeName: string | null; logoUrl: string | null; onDone: () => void; ready: boolean }) {
   const [phase, setPhase] = useState(0);
   useEffect(() => {
-    const t1 = setTimeout(() => setPhase(1), 1050); // SamJoE settled → fade to store
-    const t2 = setTimeout(() => setPhase(2), 1950); // store visible → exit overlay
+    const t1 = setTimeout(() => setPhase(1), 1050);
+    const t2 = setTimeout(() => setPhase(2), 1950);
     const t3 = setTimeout(() => onDone(), 2400);
     return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); };
   }, [onDone]);
   const letters = 'SamJoE'.split('');
   return (
-    <div className={`${styles.introOverlay} ${phase >= 2 ? styles.introExit : ''}`}>
+    <div className={`${styles.introOverlay} ${phase >= 2 && ready ? styles.introExit : ''}`}>
       <div className={`${styles.introSamjoe} ${phase >= 1 ? styles.introFadeOut : ''}`}>
         <div className={styles.introLetters}>
           {letters.map((char, i) => (

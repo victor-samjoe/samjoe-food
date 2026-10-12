@@ -1,11 +1,25 @@
 import { injectApiRequest } from '@foodapp/api/serverless';
+import { env as cloudflareEnv } from 'cloudflare:workers';
 
 const EXTERNAL_API = process.env.API_INTERNAL_URL
   ?? process.env.NEXT_PUBLIC_API_URL
   ?? 'http://127.0.0.1:3001';
 
 export async function forwardFoodApi(request: Request, path: string) {
-  const connectionString = process.env.DATABASE_URL;
+  let connectionString = process.env.DATABASE_URL;
+  if (!connectionString) {
+    const workerBindings = cloudflareEnv as {
+      DATABASE_URL?: unknown;
+      HYPERDRIVE?: { connectionString?: unknown };
+    };
+    const hyperdriveUrl = workerBindings.HYPERDRIVE?.connectionString;
+    const databaseUrl = workerBindings.DATABASE_URL;
+    connectionString = typeof hyperdriveUrl === 'string'
+      ? hyperdriveUrl
+      : typeof databaseUrl === 'string'
+        ? databaseUrl
+        : undefined;
+  }
   if (connectionString) {
     return injectApiRequest({ connectionString, path, request });
   }

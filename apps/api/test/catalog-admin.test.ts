@@ -75,6 +75,25 @@ test('GET /v1/admin/stores retorna 403 para VIEWER', async () => {
   await app.close();
 });
 
+test('PATCH /v1/admin/stores/:storeSlug aceita fundo configurável do destaque', async () => {
+  const pool = buildPool({
+    'FROM auth_sessions': [validSession],
+    'UPDATE stores SET': [{
+      store_id: 'store-a', store_slug: 'doce-horizonte-centro', store_name: 'Centro', currency: 'BRL',
+      storefront_config: { hero_bg_type: 'COLOR', hero_bg_color: '#fffaf4', hero_bg_image_url: null },
+    }],
+  });
+  const app = buildApp({ pool });
+  const res = await app.inject({
+    method: 'PATCH', url: '/v1/admin/stores/doce-horizonte-centro',
+    headers: { authorization: 'Bearer demo-token-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' },
+    payload: { storefront_config: { hero_bg_type: 'COLOR', hero_bg_color: '#fffaf4', hero_bg_image_url: null } },
+  });
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.json().store.storefront_config.hero_bg_type, 'COLOR');
+  await app.close();
+});
+
 test('GET /v1/admin/stores/:storeSlug/products lista produtos com dados de legacy', async () => {
   const pool = buildPool({
     'FROM auth_sessions': [validSession],
@@ -138,5 +157,33 @@ test('PATCH /v1/admin/products/:id atualiza produto existente', async () => {
   });
   assert.equal(res.statusCode, 200);
   assert.equal(res.json().product_id, 'prod-1');
+  await app.close();
+});
+
+test('PATCH /v1/admin/products/:id arquiva e desativa o produto', async () => {
+  let updateSql = '';
+  let updateValues: unknown[] | undefined;
+  const base = buildPool({ 'FROM auth_sessions': [validSession] });
+  const pool: TransactionalDatabase = {
+    ...base,
+    async query<T extends QueryResultRow>(sql: string, values?: unknown[]): Promise<{ rows: T[] }> {
+      if (sql.includes('UPDATE products')) {
+        updateSql = sql;
+        updateValues = values;
+        return { rows: [{ product_id: 'prod-1' } as unknown as T] };
+      }
+      return base.query<T>(sql, values);
+    },
+  };
+  const app = buildApp({ pool });
+  const res = await app.inject({
+    method: 'PATCH', url: '/v1/admin/products/prod-1',
+    headers: { authorization: 'Bearer demo-token-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' },
+    payload: { is_archived: true },
+  });
+  assert.equal(res.statusCode, 200);
+  assert.match(updateSql, /is_archived = \$3/);
+  assert.match(updateSql, /is_active = false/);
+  assert.deepEqual(updateValues, ['prod-1', 'tenant-a', true]);
   await app.close();
 });

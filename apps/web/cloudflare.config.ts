@@ -9,6 +9,9 @@ export default defineConfig({
     assets: { notFoundHandling: "none" },
     env: {
       ASSETS: bindings.assets(),
+      HYPERDRIVE: bindings.hyperdrive({
+        id: "803d550b5efa4df2b0c303d0b524cae9",
+      }),
     },
   }),
 });

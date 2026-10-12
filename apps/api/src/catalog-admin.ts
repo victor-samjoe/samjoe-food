@@ -12,6 +12,7 @@ type AdminProductRow = {
   product_name: string;
   description: string | null;
   is_active: boolean;
+  is_archived: boolean;
   cover_image_url: string | null;
   category_id: string | null;
   category_name: string | null;
@@ -91,6 +92,9 @@ export function registerCatalogAdminRoutes(app: FastifyInstance, database: Trans
         hero_images: { type: 'array', maxItems: 5, items: { type: 'string', maxLength: 750000 } },
         hero_section_size: { enum: ['COMPACT','NORMAL','TALL'] },
         hero_image_fit: { enum: ['FILL','FIT'] },
+        hero_bg_type: { enum: ['GRADIENT','COLOR','IMAGE'] },
+        hero_bg_color: { type: ['string','null'], pattern: '^#[0-9a-fA-F]{6}$' },
+        hero_bg_image_url: { type: ['string','null'], maxLength: 750000 },
         logo_url: { type: ['string','null'], maxLength: 750000 },
         font_family: { enum: ['CLASSIC','MODERN','ROUNDED'] },
         text_case: { enum: ['AS_TYPED','UPPERCASE'] },
@@ -173,7 +177,7 @@ export function registerCatalogAdminRoutes(app: FastifyInstance, database: Trans
     });
   });
 
-  app.get<{ Params: StoreSlugParams }>('/v1/admin/stores/:storeSlug/products', async (request, reply) => {
+  app.get<{ Params: StoreSlugParams; Querystring: { include_archived?: string } }>('/v1/admin/stores/:storeSlug/products', async (request, reply) => {
     const session = await requireOperator(request, database);
     const { rows } = await database.query<AdminProductRow>(`
       SELECT
@@ -181,6 +185,7 @@ export function registerCatalogAdminRoutes(app: FastifyInstance, database: Trans
         p.name AS product_name,
         p.description,
         p.is_active,
+        p.is_archived,
         p.cover_image_url,
         c.id AS category_id,
         c.name AS category_name,
@@ -202,8 +207,9 @@ export function registerCatalogAdminRoutes(app: FastifyInstance, database: Trans
        AND ei.entity_id = p.id
        AND ei.source = 'legacy-sheets'
       WHERE s.slug = $1 AND s.tenant_id = $2
+        AND (p.is_archived = false OR $3::boolean)
       ORDER BY p.name, v.name
-    `, [request.params.storeSlug, session.tenant_id]);
+    `, [request.params.storeSlug, session.tenant_id, request.query.include_archived === 'true']);
 
     if (rows.length === 0) {
       const { rows: storeCheck } = await database.query(
@@ -214,7 +220,7 @@ export function registerCatalogAdminRoutes(app: FastifyInstance, database: Trans
     }
 
     type ProductEntry = {
-      id: string; name: string; description: string | null; is_active: boolean;
+      id: string; name: string; description: string | null; is_active: boolean; is_archived: boolean;
       cover_image_url: string | null;
       category: { id: string | null; name: string | null } | null; legacy_id: string | null;
       variants: Array<{ id: string; sku: string; name: string; price_cents: number; currency: string; inventory_policy: string | null; is_active: boolean }>;
@@ -225,6 +231,7 @@ export function registerCatalogAdminRoutes(app: FastifyInstance, database: Trans
         products.set(row.product_id, {
           id: row.product_id, name: row.product_name, description: row.description,
           is_active: row.is_active,
+          is_archived: row.is_archived,
           cover_image_url: row.cover_image_url ?? null,
           category: row.category_id ? { id: row.category_id, name: row.category_name } : null,
           legacy_id: row.legacy_id,
@@ -294,7 +301,7 @@ export function registerCatalogAdminRoutes(app: FastifyInstance, database: Trans
     },
   );
 
-  app.patch<{ Params: ProductIdParams; Body: { name?: string; description?: string | null; is_active?: boolean; cover_image_url?: string | null } }>(
+  app.patch<{ Params: ProductIdParams; Body: { name?: string; description?: string | null; is_active?: boolean; is_archived?: boolean; cover_image_url?: string | null } }>(
     '/v1/admin/products/:productId',
     {
       schema: {
@@ -304,6 +311,7 @@ export function registerCatalogAdminRoutes(app: FastifyInstance, database: Trans
             name: { type: 'string', minLength: 1, maxLength: 200 },
             description: { type: ['string', 'null'], maxLength: 1000 },
             is_active: { type: 'boolean' },
+            is_archived: { type: 'boolean' },
             cover_image_url: { type: ['string', 'null'], maxLength: 750000 },
           },
         },
@@ -311,13 +319,17 @@ export function registerCatalogAdminRoutes(app: FastifyInstance, database: Trans
     },
     async (request, reply) => {
       const session = await requireOperator(request, database);
-      const { name, description, is_active, cover_image_url } = request.body;
+      const { name, description, is_active, is_archived, cover_image_url } = request.body;
 
       const sets: string[] = [];
       const values: unknown[] = [request.params.productId, session.tenant_id];
       if (name !== undefined) { sets.push(`name = $${values.push(name)}`); }
       if (description !== undefined) { sets.push(`description = $${values.push(description)}`); }
       if (is_active !== undefined) { sets.push(`is_active = $${values.push(is_active)}`); }
+      if (is_archived !== undefined) {
+        sets.push(`is_archived = $${values.push(is_archived)}`);
+        if (is_archived && is_active === undefined) sets.push('is_active = false');
+      }
       if (cover_image_url !== undefined) { sets.push(`cover_image_url = $${values.push(cover_image_url)}`); }
       if (sets.length === 0) throw new HttpError(400, 'no_fields', 'Nenhum campo para atualizar.');
 
