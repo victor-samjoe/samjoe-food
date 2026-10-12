@@ -9,7 +9,7 @@ Publicar, validar e transferir com rollback seguro a primeira loja cliente da Sa
 
 ## Escopo
 
-- [ ] Criar tenant e loja `samjoe-confeitaria`.
+- [x] Criar tenant e loja `samjoe-confeitaria`.
 - [ ] Criar OWNER real com troca obrigatória de senha.
 - [ ] Importar catálogo com dry-run.
 - [ ] Migrar imagens e reconciliar produtos, preços e disponibilidade.

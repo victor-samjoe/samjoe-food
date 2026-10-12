@@ -15,6 +15,7 @@ Transferir persistência, imagens e tarefas periódicas para serviços gerenciad
 - [ ] Aplicar modelo canônico sem seed de demonstração em produção.
 - [ ] Usar conexão serverless pelo transaction pooler com SSL e pool mínimo.
 - [ ] Criar papel de aplicação com menor privilégio.
+- [x] Bloquear acesso direto de `anon`/`authenticated` e habilitar RLS em todas as tabelas públicas.
 - [ ] Configurar Supabase Storage e caminhos isolados por tenant.
 - [ ] Migrar imagens base64/URLs para objetos do Storage.
 - [x] Converter expiração de reservas em função SQL idempotente.
@@ -39,4 +40,5 @@ Transferir persistência, imagens e tarefas periódicas para serviços gerenciad
 - Staging oficial `samjoe-food-staging` (`ikboutpjeayqnamuhmqo`) criado em `sa-east-1` e vinculado à CLI.
 - As 12 migrations estão sincronizadas no histórico remoto; 38 tabelas públicas foram verificadas.
 - Jobs `foodapp-expire-inventory-reservations` e `foodapp-expire-simulated-payments` estão ativos.
+- Advisor oficial de segurança aprovado sem alertas após a migration `0019_lock_down_data_api.sql`.
 
