@@ -24,7 +24,7 @@ Definir o modelo de dados do FoodApp e os contratos que permitem migrar sem acop
 ## Evidências
 
 - `docs/architecture/CANONICAL_MODEL.md`;
-- `database/migrations/0001_canonical_model.sql`;
+- `supabase/migrations/0001_canonical_model.sql`;
 - `database/seeds/0001_demo.sql`;
 - `contracts/openapi/foodapp.v1.yaml`;
 - `contracts/schemas/*.json`;

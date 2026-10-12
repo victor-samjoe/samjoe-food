@@ -9,7 +9,7 @@ Transferir persistência, imagens e tarefas periódicas para serviços gerenciad
 
 ## Escopo
 
-- [ ] Criar projetos Supabase separados para staging e produção, conforme disponibilidade do plano.
+- [x] Criar projeto Supabase de staging em São Paulo; produção permanece pendente até o aceite.
 - [ ] Criar organização oficial SamJoE com `victor.conceicao@samjoe.com.br` como proprietário principal e MFA habilitado.
 - [x] Implementar runner versionado de migrations.
 - [ ] Aplicar modelo canônico sem seed de demonstração em produção.
@@ -19,7 +19,7 @@ Transferir persistência, imagens e tarefas periódicas para serviços gerenciad
 - [ ] Migrar imagens base64/URLs para objetos do Storage.
 - [x] Converter expiração de reservas em função SQL idempotente.
 - [x] Converter expiração de pagamentos simulados em função SQL idempotente.
-- [ ] Configurar Supabase Cron e histórico de execução.
+- [x] Configurar Supabase Cron e histórico de execução.
 - [ ] Implementar backup lógico e cópia externa dos objetos.
 - [ ] Ensaiar restauração em projeto separado.
 
@@ -36,5 +36,7 @@ Transferir persistência, imagens e tarefas periódicas para serviços gerenciad
 - As 11 migrations foram aplicadas em PostgreSQL 16 descartável e reaplicadas sem duplicação.
 - Foram verificadas as funções `expire_inventory_reservations` e `expire_simulated_payments`.
 - A CLI Supabase 2.120.0 está disponível e autenticada.
-- Próxima decisão necessária: criar staging em `VictorF17's Org` ou `Victor Geral`.
+- Staging oficial `samjoe-food-staging` (`ikboutpjeayqnamuhmqo`) criado em `sa-east-1` e vinculado à CLI.
+- As 12 migrations estão sincronizadas no histórico remoto; 38 tabelas públicas foram verificadas.
+- Jobs `foodapp-expire-inventory-reservations` e `foodapp-expire-simulated-payments` estão ativos.
 

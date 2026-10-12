@@ -177,6 +177,8 @@ Confirmar e registrar em ADR:
 
 ### Etapa 4 — Criar o projeto Supabase
 
+> Staging criado em 2026-10-11: `samjoe-food-staging`, project ref `ikboutpjeayqnamuhmqo`, região `sa-east-1` (São Paulo). O projeto de produção será criado somente após o aceite da homologação.
+
 1. Criar uma organização controlada pela SamJoE Tech & Consulting.
 2. Criar um projeto exclusivo do ambiente de produção.
 3. Selecionar a região adequada aos usuários e às exigências de dados.

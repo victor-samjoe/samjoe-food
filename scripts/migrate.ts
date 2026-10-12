@@ -7,7 +7,7 @@ async function main() {
   const connectionString = process.env.DATABASE_URL;
   if (!connectionString) throw new Error('DATABASE_URL is required');
 
-  const migrationsDirectory = path.resolve(process.cwd(), 'database', 'migrations');
+  const migrationsDirectory = path.resolve(process.cwd(), 'supabase', 'migrations');
   const pool = new pg.Pool({ connectionString, max: 1, idleTimeoutMillis: 10_000 });
   const client = await pool.connect();
 

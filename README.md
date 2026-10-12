@@ -26,7 +26,7 @@ docker compose up -d
 docker compose ps
 ```
 
-Na primeira criação do volume, PostgreSQL executa `database/migrations/0001_canonical_model.sql`. Para carregar o seed fictício:
+Na primeira criação do volume, PostgreSQL executa as migrations de `supabase/migrations`. Para carregar o seed fictício:
 
 ```powershell
 Get-Content -Raw database/seeds/0001_demo.sql | docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U foodapp -d foodapp
