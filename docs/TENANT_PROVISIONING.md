@@ -77,6 +77,42 @@ Com domínio próprio:
 
 `cloudflared` não é necessário para hospedar essa aplicação: o Worker já está online. Tunnel só seria usado para integrar algum serviço privado mantido fora da nuvem.
 
+## Inspecionar ou recriar um tenant
+
+Antes de qualquer operação destrutiva, gere um inventário somente leitura:
+
+```powershell
+npm run tenant:inspect -- --tenant-slug samjoe-confeitaria
+```
+
+Para testar o ciclo completo de um tenant já existente, use `tenant:reset`. O comando:
+
+1. valida todos os novos dados;
+2. bloqueia concorrentemente o tenant e o e-mail;
+3. salva um snapshot completo em `.runlogs/tenant-backups/`;
+4. elimina somente as linhas daquele tenant, respeitando a ordem real das chaves estrangeiras;
+5. remove usuários órfãos que pertenciam somente ao tenant substituído;
+6. recria tenant, loja, OWNER, perfil contratual e domínio em uma única transação;
+7. testa a URL pública `/loja/<slug>` após o commit.
+
+Primeiro execute sem `--apply`:
+
+```powershell
+npm run tenant:reset -- `
+  --tenant-slug samjoe-confeitaria `
+  --confirm-delete samjoe-confeitaria `
+  --email responsavel@example.com `
+  --owner-name "Responsável Exemplo" `
+  --business-name "SamJoE Confeitaria" `
+  --legal-name "Razão Social Exemplo" `
+  --document "12.345.678/0001-95" `
+  --domain "app.confeitaria.samjoe.com.br"
+```
+
+Depois de revisar o resumo e confirmar que `DATABASE_URL` aponta para o ambiente correto, repita com `--apply`. O slug precisa ser informado explicitamente e seu valor deve coincidir com `--confirm-delete`; isso evita exclusões por nome gerado ou erro de digitação.
+
+O reset publica automaticamente no endereço técnico porque todos os clientes usam o mesmo Worker multi-tenant. A ativação de domínio próprio continua sendo uma etapa separada: ela só pode ser totalmente automatizada quando a zona DNS estiver sob uma conta Cloudflare controlada pela SamJoE. Em DNS externo, o sistema deve gerar a instrução e aguardar a confirmação do apontamento.
+
 ## Opções do comando
 
 | Opção | Obrigatória | Descrição |

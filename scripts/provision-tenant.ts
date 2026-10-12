@@ -15,7 +15,7 @@ type ExistingTenantRow = TenantRow & {
 type UserRow = { id: string; email: string; created: boolean };
 type StoreRow = { id: string; name: string; slug: string };
 
-function parseArguments(argv: string[]): ParsedArguments {
+export function parseArguments(argv: string[]): ParsedArguments {
   const values: Record<string, string | undefined> = {};
   let apply = false;
   for (let index = 0; index < argv.length; index += 1) {
@@ -34,7 +34,7 @@ function parseArguments(argv: string[]): ParsedArguments {
   return { values, apply };
 }
 
-function publicResult(input: ProvisioningInput) {
+export function publicResult(input: ProvisioningInput) {
   return {
     tenant: { name: input.businessName, slug: input.tenantSlug },
     store: { name: input.storeName, slug: input.storeSlug },
@@ -53,13 +53,9 @@ function publicResult(input: ProvisioningInput) {
   };
 }
 
-async function provision(input: ProvisioningInput, connectionString: string) {
-  const pool = new pg.Pool({ connectionString, max: 1, idleTimeoutMillis: 10_000 });
-  const client = await pool.connect();
+export async function provisionTenantInTransaction(client: pg.PoolClient, input: ProvisioningInput) {
   const temporaryPassword = createTemporaryPassword();
-  try {
-    await client.query('BEGIN');
-    await client.query(
+  await client.query(
       "SELECT pg_advisory_xact_lock(hashtextextended('tenant:' || $1, 0))",
       [input.tenantSlug],
     );
@@ -171,8 +167,17 @@ async function provision(input: ProvisioningInput, connectionString: string) {
       VALUES ($1, 'ADMIN', 'tenant.provisioned', 'tenant', $1, $2::jsonb)
     `, [tenant.id, JSON.stringify({ store_id: store.id, owner_user_id: user.id, domain: input.domain })]);
 
+  return { tenant, store, user, temporaryPassword: user.created ? temporaryPassword : null };
+}
+
+export async function provision(input: ProvisioningInput, connectionString: string) {
+  const pool = new pg.Pool({ connectionString, max: 1, idleTimeoutMillis: 10_000 });
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const result = await provisionTenantInTransaction(client, input);
     await client.query('COMMIT');
-    return { tenant, store, user, temporaryPassword: user.created ? temporaryPassword : null };
+    return result;
   } catch (error) {
     await client.query('ROLLBACK');
     throw error;
@@ -207,7 +212,9 @@ async function main() {
   console.log('\nA senha temporária é exibida uma única vez. Entregue-a por canal seguro e não a registre em tarefas ou tickets.');
 }
 
-main().catch((error: unknown) => {
-  process.stderr.write(`${error instanceof Error ? error.stack ?? error.message : String(error)}\n`);
-  process.exitCode = 1;
-});
+if (process.argv[1] && /(?:^|[\\/])provision-tenant\.(?:ts|js)$/.test(process.argv[1])) {
+  main().catch((error: unknown) => {
+    process.stderr.write(`${error instanceof Error ? error.stack ?? error.message : String(error)}\n`);
+    process.exitCode = 1;
+  });
+}

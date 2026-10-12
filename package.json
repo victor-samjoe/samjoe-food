@@ -12,6 +12,8 @@
     "dev:worker": "tsx --env-file=.env apps/worker/src/index.ts",
     "db:migrate": "tsx --env-file=.env scripts/migrate.ts",
     "tenant:create": "tsx scripts/provision-tenant.ts",
+    "tenant:inspect": "tsx scripts/inspect-tenant.ts",
+    "tenant:reset": "tsx scripts/reset-tenant.ts",
     "test:tenant-provisioning": "tsx --test scripts/tenant-provisioning.test.ts",
     "import:catalog": "tsx --env-file=.env scripts/import-catalog.ts",
     "reconcile:catalog": "tsx --env-file=.env scripts/reconcile-catalog.ts"

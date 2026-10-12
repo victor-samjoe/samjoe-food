@@ -18,7 +18,14 @@ Permitir que o proprietário da SamJoE provisione um novo cliente com segurança
 - [x] Oferecer dry-run como comportamento padrão.
 - [x] Criar testes das validações críticas.
 - [x] Aplicar e validar a migration `0021` no Supabase.
+- [x] Criar inspeção somente leitura por tenant.
+- [x] Criar reset protegido com backup, confirmação nominal e recriação transacional.
+- [x] Adicionar smoke test automático da URL técnica após a recriação.
+- [ ] Criar restauração automatizada a partir do snapshot de backup.
+- [ ] Resolver hostname verificado para a loja correta no Worker.
+- [ ] Automatizar domínio customizado quando a zona estiver na conta Cloudflare oficial.
 - [ ] Executar primeiro provisionamento fictício completo e removê-lo após o teste.
+- [ ] Executar reset real da SamJoE Confeitaria com dados oficiais e validar login/loja.
 
 ## Evolução para convite seguro
 
