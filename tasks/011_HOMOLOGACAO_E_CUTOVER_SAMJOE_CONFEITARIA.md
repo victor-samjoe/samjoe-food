@@ -1,11 +1,17 @@
 # Tarefa 011 — Homologação e cutover da SamJoE Confeitaria
 
-Status: **aguardando Tarefas 009 e 010**  
+Status: **em andamento; execução detalhada nas Tarefas 012 e 013**
 Prioridade: **crítica**
 
 ## Objetivo
 
 Publicar, validar e transferir com rollback seguro a primeira loja cliente da SamJoE Food.
+
+## Plano de execução
+
+- A homologação funcional detalhada está na `012_HOMOLOGACAO_FUNCIONAL_ONLINE.md`.
+- O corte e rollback do domínio estão na `013_CUTOVER_DOMINIO_SAMJOE_CONFEITARIA.md`.
+- Esta tarefa permanece como marco de aceite operacional da primeira loja.
 
 ## Escopo
 

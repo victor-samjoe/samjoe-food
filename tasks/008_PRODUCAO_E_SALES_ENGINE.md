@@ -17,6 +17,8 @@ Atualização: 12/10/2026
 - [ ] Validar login, catálogo, checkout e painel em smoke test online.
 - [ ] Configurar domínio da loja somente após o smoke test completo.
 
+Detalhamento: Tarefas `012_HOMOLOGACAO_FUNCIONAL_ONLINE.md` e `013_CUTOVER_DOMINIO_SAMJOE_CONFEITARIA.md`.
+
 ## Sales Engine
 
 - [x] Confirmar que o repositório oficial estava vazio.
@@ -29,6 +31,8 @@ Atualização: 12/10/2026
 - [x] Aplicar migration após validar a credencial do banco.
 - [ ] Implementar autenticação, tenant, contatos e consentimentos.
 - [x] Publicar Worker `samjoe-sales-engine` e executar smoke test de health.
+
+Detalhamento: Tarefa `014_SALES_ENGINE_IDENTIDADE_CONTATOS_E_CONSENTIMENTOS.md`.
 
 ## Regra operacional
 

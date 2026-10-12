@@ -15,6 +15,10 @@ Este diretório organiza a substituição incremental do sistema legado em `E:\s
 9. `009_PRODUCAO_SERVERLESS_E_DOMINIOS.md`
 10. `010_SUPABASE_E_JOBS_GERENCIADOS.md`
 11. `011_HOMOLOGACAO_E_CUTOVER_SAMJOE_CONFEITARIA.md`
+12. `012_HOMOLOGACAO_FUNCIONAL_ONLINE.md`
+13. `013_CUTOVER_DOMINIO_SAMJOE_CONFEITARIA.md`
+14. `014_SALES_ENGINE_IDENTIDADE_CONTATOS_E_CONSENTIMENTOS.md`
+15. `015_MANUTENCAO_CI_GITHUB_ACTIONS.md`
 
 ## Regras de execução
 
@@ -32,5 +36,9 @@ Este diretório organiza a substituição incremental do sistema legado em `E:\s
 - Fundação da aplicação: **em andamento**.
 - Catálogo, pedidos, estoque, pagamentos e entregas: **concluídos em simulação local**.
 - Produção serverless e domínios: **em andamento**.
-- Supabase, homologação e cutover: **aguardando dependências**.
+- Supabase e infraestrutura online: **em andamento, com Workers e banco remoto publicados**.
+- Homologação funcional: **pronta para execução na Tarefa 012**.
+- Cutover do domínio: **bloqueado pelo aceite da Tarefa 012**.
+- Sales Engine: **fundação publicada; identidade, contatos e consentimentos na Tarefa 014**.
+- Manutenção do CI: **planejada na Tarefa 015**.
 
