@@ -108,7 +108,8 @@ export default function MasterSectionPage({ section }: { section: Section }) {
   async function createUser(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!selected) return;
-    const data = new FormData(event.currentTarget);
+    const form = event.currentTarget;
+    const data = new FormData(form);
     setAccessBusy(true);
     setError('');
     try {
@@ -120,7 +121,8 @@ export default function MasterSectionPage({ section }: { section: Section }) {
       });
       setCredential({ email: result.user.email, password: result.temporary_password });
       await openAccess(selected, true);
-      event.currentTarget.reset();
+      await load(token);
+      form.reset();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Falha ao criar acesso.');
     } finally {

@@ -34,6 +34,7 @@ const nextAction: Partial<Record<OrderStatus,{to:OrderStatus;label:string}>> = {
 };
 const emptyAddress: Address = { street:'',number:'',complement:'',district:'',city:'',state:'SP',postal_code:'',reference:'' };
 const defaultStorefront:StorefrontConfig={brand_subtitle:'Confeitaria artesanal',hero_eyebrow:'feito com calma, servido com carinho',hero_title:'Um pedaço de doçura para deixar o dia mais leve.',hero_description:'Escolha seus favoritos, monte o carrinho e envie seu pedido em poucos passos.',primary_color:'#9f3f35',accent_color:'#e7b55f',background_color:'#fffaf4',hero_image_enabled:true,hero_image_url:null,hero_image_size:'MEDIUM',hero_display_mode:'CORNER',hero_images:[],hero_section_size:'NORMAL',hero_image_fit:'FILL',logo_url:null,font_family:'CLASSIC',text_case:'AS_TYPED'};
+const defaultDeliveryPricing:DeliveryPricing={id:'',version:'primeira configuração',base_fee_cents:0,included_meters:0,price_per_extra_km_cents:0,standard_radius_meters:0,maximum_radius_meters:0,exception_fee_cents:0,is_active:false};
 
 function saoPauloDate(value: string | Date = new Date()) {
   const parts = new Intl.DateTimeFormat('en-CA', {
@@ -140,9 +141,13 @@ export default function AdminPage() {
         api<Board>(`admin/stores/${storeSlug}/delivery-board`,accessToken),
         api<{products:Product[]}>(`admin/stores/${storeSlug}/products?include_archived=true`,accessToken),
         api<{store:Store}>(`admin/stores/${storeSlug}`,accessToken),
-        api<{pricing:DeliveryPricing}>(`admin/stores/${storeSlug}/delivery-pricing`,accessToken),
+        api<{pricing:DeliveryPricing}>(`admin/stores/${storeSlug}/delivery-pricing`,accessToken)
+          .catch((cause:unknown) => {
+            if (cause instanceof Error && cause.message === 'Regra de frete não encontrada.') return {pricing:null as DeliveryPricing|null};
+            throw cause;
+          }),
       ]);
-      setOrders(orderData.orders ?? []); setBoard(deliveryData); setProducts(productData.products ?? []); setStore(storeData.store); setStoreNameDraft(storeData.store.store_name); setPricing(pricingData.pricing);
+      setOrders(orderData.orders ?? []); setBoard(deliveryData); setProducts(productData.products ?? []); setStore(storeData.store); setStoreNameDraft(storeData.store.store_name); setPricing(pricingData.pricing??defaultDeliveryPricing);
       const loadedAddress=storeData.store.origin_address??{};
       setAddress({...emptyAddress,...Object.fromEntries(Object.entries(loadedAddress).map(([key,value])=>[key,value??'']))});
       setStorefront({...defaultStorefront,...(storeData.store.storefront_config ?? {})});
