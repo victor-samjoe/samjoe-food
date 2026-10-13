@@ -260,7 +260,7 @@ export default function Storefront({ storeSlug }: { storeSlug: string }) {
 
       <section className={styles.catalog} id="cardapio">
         <div className={styles.catalogHeading}>
-          <div><span className={styles.kicker}>CARDÁPIO DIGITAL</span><h2>Escolha o seu momento doce</h2></div>
+          <div><span className={styles.kicker}>CARDÁPIO DIGITAL</span></div>
           <label className={styles.search}><span>⌕</span><input value={query} onChange={event => setQuery(event.target.value)} placeholder="Buscar no cardápio" /></label>
         </div>
         <div className={styles.chips} aria-label="Categorias">
@@ -277,7 +277,7 @@ export default function Storefront({ storeSlug }: { storeSlug: string }) {
         </section>)}
       </section>
 
-      <section className={styles.promise}><span>✦</span><div><strong>Ambiente 100% demonstrativo</strong><p>Produtos, clientes, endereços e pedidos desta tela são inteiramente fictícios.</p></div></section>
+      <section className={styles.promise}><span>✦</span><div><strong>Pedido direto com a loja</strong><p>Escolha seus produtos e acompanhe cada etapa do pedido em um só lugar.</p></div></section>
       <footer className={styles.footer}><span>{storeName} · tecnologia SamJoE Food</span><span>SamJoE Tech &amp; Consulting</span></footer>
       {itemCount > 0 && <button className={styles.mobileCart} onClick={() => setCartOpen(true)}><b>{itemCount}</b><span>Ver carrinho</span><strong>{money(subtotal)}</strong></button>}
 
@@ -298,7 +298,7 @@ export default function Storefront({ storeSlug }: { storeSlug: string }) {
       </>}
 
       {order && <div className={styles.orderOverlay} role="dialog" aria-modal="true" aria-label="Pedido confirmado"><div className={styles.orderSuccess}>
-        <span className={styles.successIcon}>✓</span><span className={styles.kicker}>PEDIDO CRIADO</span><h2>Deu tudo certo!</h2><p>Seu pedido fictício entrou no painel operacional.</p>
+        <span className={styles.successIcon}>✓</span><span className={styles.kicker}>PEDIDO CRIADO</span><h2>Deu tudo certo!</h2><p>Seu pedido entrou no painel da loja.</p>
         <strong className={styles.orderNumber}>{order.public_number}</strong><div className={styles.orderTotal}><span>Total</span><b>{money(order.total.amount_cents)}</b></div><button className={styles.primaryButton} onClick={() => setOrder(null)}>Voltar ao cardápio</button>
       </div></div>}
     </main>
@@ -414,7 +414,7 @@ function Checkout({ storeSlug, form, updateForm, submitting, onConfirm, onBack, 
       <label>Bairro<input required value={form.district} onChange={event => updateForm('district', event.target.value)} /></label><label>Cidade<input required value={form.city} onChange={event => updateForm('city', event.target.value)} /></label>
       <label>UF<input required maxLength={2} value={form.state} onChange={event => updateForm('state', event.target.value)} /></label><label>CEP<input required inputMode="numeric" value={form.postalCode} onChange={event => updateForm('postalCode', event.target.value)} /></label>
     </div>}
-    <label>Pagamento<select value={form.paymentMethod} onChange={event => updateForm('paymentMethod', event.target.value as PaymentMethod)}><option value="CASH">Dinheiro na retirada/entrega</option><option value="PIX">Pix simulado</option><option value="MERCADO_PAGO">Mercado Pago simulado</option></select></label>
+    <label>Pagamento<select value={form.paymentMethod} onChange={event => updateForm('paymentMethod', event.target.value as PaymentMethod)}><option value="CASH">Dinheiro na retirada/entrega</option><option value="PIX">Pix</option><option value="MERCADO_PAGO">Mercado Pago</option></select></label>
     {quoteError && <p className={styles.quoteError}>{quoteError}</p>}
     <button className={styles.primaryButton} disabled={quoteLoading}>{quoteLoading ? 'Calculando frete…' : 'Revisar pedido →'}</button>
   </form>;
