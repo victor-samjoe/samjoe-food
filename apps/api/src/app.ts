@@ -8,6 +8,7 @@ import { registerCustomerRoutes } from './customers.js';
 import { registerOrderRoutes } from './orders.js';
 import { registerDeliveryRoutes } from './deliveries.js';
 import { registerPaymentRoutes } from './payments.js';
+import { registerControlCenterRoutes } from './control-center.js';
 import { HttpError } from './errors.js';
 
 export type AppDependencies = {
@@ -76,6 +77,7 @@ export function buildApp(dependencies: AppDependencies = {}) {
     registerOrderRoutes(app, dependencies.pool);
     registerDeliveryRoutes(app, dependencies.pool);
     registerPaymentRoutes(app, dependencies.pool);
+    registerControlCenterRoutes(app, dependencies.pool);
   }
 
   app.setNotFoundHandler((request, reply) => reply.status(404).send({

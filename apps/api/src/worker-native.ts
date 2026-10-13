@@ -9,6 +9,7 @@ import { registerCustomerRoutes } from './customers.js';
 import { registerOrderRoutes } from './orders.js';
 import { registerDeliveryRoutes } from './deliveries.js';
 import { registerPaymentRoutes } from './payments.js';
+import { registerControlCenterRoutes } from './control-center.js';
 import { HttpError } from './errors.js';
 
 export type ApiDatabaseClient = {
@@ -160,6 +161,7 @@ registerCustomerRoutes(compatibleRouter, contextualDatabase);
 registerOrderRoutes(compatibleRouter, contextualDatabase);
 registerDeliveryRoutes(compatibleRouter, contextualDatabase);
 registerPaymentRoutes(compatibleRouter, contextualDatabase);
+registerControlCenterRoutes(compatibleRouter, contextualDatabase);
 
 const defaultClientFactory: ApiClientFactory = (connectionString) => {
   return new Client({

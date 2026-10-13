@@ -1,6 +1,6 @@
 # Tarefa 017 — SamJoE Control Center
 
-Status: **planejamento**
+Status: **MVP publicado em implementação**
 Prioridade: **alta**
 
 ## Objetivo
@@ -9,6 +9,10 @@ Criar o painel interno da SamJoE para administrar clientes, contratos, acessos, 
 
 ## Cadastros
 
+- [x] Criar schema isolado `control_plane` no Supabase oficial.
+- [x] Criar identidade e sessão exclusivas para o proprietário da plataforma.
+- [x] Registrar clientes e produtos contratados por ambiente.
+- [x] Registrar assinatura, plano e valor mensal inicial.
 - [ ] Organizações clientes, responsáveis, documentos e contatos.
 - [ ] Produtos contratados: Food, Sales Engine e futuros sistemas.
 - [ ] Ambientes, URLs, domínios, plano, situação contratual e datas importantes.
@@ -17,6 +21,9 @@ Criar o painel interno da SamJoE para administrar clientes, contratos, acessos, 
 
 ## Operação
 
+- [x] Publicar visão master inicial com clientes, lojas, produtos, domínio e faturamento.
+- [x] Separar o login master dos logins administrativos de tenant.
+- [x] Exibir Sales Engine como disponível sem permitir ativação antes do endpoint oficial.
 - [ ] Painel de saúde de Worker, banco, Hyperdrive, jobs e domínio/TLS.
 - [ ] Estado do último deploy e commit GitHub por sistema.
 - [ ] Alertas de indisponibilidade, migration pendente e credencial próxima de expirar.
