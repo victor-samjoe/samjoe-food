@@ -334,6 +334,8 @@ function Checkout({ storeSlug, form, updateForm, submitting, onConfirm, onBack, 
   const [deliveryFee, setDeliveryFee] = useState<number|null>(null);
   const [quoteError, setQuoteError] = useState('');
   const [rawPhone, setRawPhone] = useState(() => form.phone.replace(/^\+55/, ''));
+  const [summaryOpen, setSummaryOpen] = useState(false);
+  const summaryCount = cartItems.reduce((total, item) => total + item.quantity, 0);
 
   async function handleContinue(event: FormEvent) {
     event.preventDefault();
@@ -393,6 +395,16 @@ function Checkout({ storeSlug, form, updateForm, submitting, onConfirm, onBack, 
   }
 
   return <form className={styles.checkout} onSubmit={e => void handleContinue(e)}>
+    <div className={styles.checkoutCartSummary}>
+      <button type="button" onClick={() => setSummaryOpen(current => !current)} aria-expanded={summaryOpen}>
+        <span><b>{summaryCount} {summaryCount === 1 ? 'item' : 'itens'} no pedido</b><small>{money(subtotal)}</small></span>
+        <strong>{summaryOpen ? 'Ocultar' : 'Ver pedido'} <i aria-hidden="true">{summaryOpen ? '↑' : '↓'}</i></strong>
+      </button>
+      {summaryOpen && <div className={styles.checkoutCartItems}>
+        {cartItems.map(item => <div key={item.variant.id}><span>{item.quantity}× {item.productName}</span><strong>{money(item.variant.price.amount_cents * item.quantity)}</strong></div>)}
+        <button type="button" onClick={onBack}>Editar itens</button>
+      </div>}
+    </div>
     <button type="button" className={styles.backButton} onClick={onBack}>← Voltar para o carrinho</button><h3>Seus dados</h3>
     <div className={styles.segmented}><button type="button" className={form.fulfillment === 'PICKUP' ? styles.segmentActive : ''} onClick={() => updateForm('fulfillment', 'PICKUP')}>Retirada</button><button type="button" className={form.fulfillment === 'DELIVERY' ? styles.segmentActive : ''} onClick={() => updateForm('fulfillment', 'DELIVERY')}>Entrega</button></div>
     <label>WhatsApp {phoneLoading&&<span className={styles.phoneSpinner}>…</span>}<div className={styles.phoneInput}><span className={styles.phonePrefix}>+55</span><input required placeholder="(11) 98765-4321" value={rawPhone} onChange={e=>{setRawPhone(e.target.value);onPhoneChange(normalizeBRPhone(e.target.value));}}/></div></label>
@@ -410,12 +422,21 @@ function Checkout({ storeSlug, form, updateForm, submitting, onConfirm, onBack, 
 
 function HeroCarousel({ images, storeName }: { images: string[]; storeName: string }) {
   const [index, setIndex] = useState(0);
+  const touchStart = useRef<number|null>(null);
   useEffect(() => {
     if (images.length < 2) return;
     const id = setInterval(() => setIndex(current => (current + 1) % images.length), 4000);
     return () => clearInterval(id);
   }, [images.length]);
-  return <div className={styles.heroCarousel}>
+  return <div className={styles.heroCarousel}
+    onTouchStart={event => { touchStart.current = event.changedTouches[0]?.clientX ?? null; }}
+    onTouchEnd={event => {
+      const start = touchStart.current;
+      const end = event.changedTouches[0]?.clientX;
+      touchStart.current = null;
+      if (start === null || end === undefined || Math.abs(end - start) < 40 || images.length < 2) return;
+      setIndex(current => end < start ? (current + 1) % images.length : (current - 1 + images.length) % images.length);
+    }}>
     {images.map((src, i) => <img key={i} className={`${styles.carouselSlide} ${i === index ? styles.carouselSlideActive : ''}`} src={src} alt={i === 0 ? `Imagem principal de ${storeName}` : ''} aria-hidden={i !== index}/>)}
     {images.length > 1 && <div className={styles.carouselDots}>{images.map((_, i) => <button key={i} className={i === index ? styles.carouselDotActive : styles.carouselDot} onClick={() => setIndex(i)} aria-label={`Slide ${i + 1}`}/>)}</div>}
   </div>;
