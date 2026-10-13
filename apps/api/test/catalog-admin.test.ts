@@ -80,18 +80,19 @@ test('PATCH /v1/admin/stores/:storeSlug aceita fundo configurável do destaque',
     'FROM auth_sessions': [validSession],
     'UPDATE stores SET': [{
       store_id: 'store-a', store_slug: 'doce-horizonte-centro', store_name: 'Centro', currency: 'BRL',
-      storefront_config: { hero_bg_type: 'COLOR', hero_bg_color: '#fffaf4', hero_bg_image_url: null, header_background_color: '#ffffff', hero_image_scale: 1.2, hero_image_position_x: 40, hero_image_position_y: 60 },
+      storefront_config: { hero_bg_type: 'COLOR', hero_bg_color: '#fffaf4', hero_bg_image_url: null, header_background_color: '#ffffff', brand_name_color: '#332211', brand_subtitle_color: '#665544', hero_eyebrow_color: '#994433', hero_title_color: '#443322', hero_description_color: '#776655', hero_image_scale: 1.2, hero_image_position_x: 40, hero_image_position_y: 60 },
     }],
   });
   const app = buildApp({ pool });
   const res = await app.inject({
     method: 'PATCH', url: '/v1/admin/stores/doce-horizonte-centro',
     headers: { authorization: 'Bearer demo-token-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' },
-    payload: { storefront_config: { hero_bg_type: 'COLOR', hero_bg_color: '#fffaf4', hero_bg_image_url: null, header_background_color: '#ffffff', hero_image_scale: 1.2, hero_image_position_x: 40, hero_image_position_y: 60 } },
+    payload: { storefront_config: { hero_bg_type: 'COLOR', hero_bg_color: '#fffaf4', hero_bg_image_url: null, header_background_color: '#ffffff', brand_name_color: '#332211', brand_subtitle_color: '#665544', hero_eyebrow_color: '#994433', hero_title_color: '#443322', hero_description_color: '#776655', hero_image_scale: 1.2, hero_image_position_x: 40, hero_image_position_y: 60 } },
   });
   assert.equal(res.statusCode, 200);
   assert.equal(res.json().store.storefront_config.hero_bg_type, 'COLOR');
   assert.equal(res.json().store.storefront_config.hero_image_position_x, 40);
+  assert.equal(res.json().store.storefront_config.hero_title_color, '#443322');
   await app.close();
 });
 
@@ -186,5 +187,36 @@ test('PATCH /v1/admin/products/:id arquiva e desativa o produto', async () => {
   assert.match(updateSql, /is_archived = \$3/);
   assert.match(updateSql, /is_active = false/);
   assert.deepEqual(updateValues, ['prod-1', 'tenant-a', true]);
+  await app.close();
+});
+
+test('DELETE /v1/admin/products/:id remove produto nunca vendido', async () => {
+  const pool = buildPool({
+    'FROM auth_sessions': [validSession],
+    'SELECT id AS product_id FROM products': [{ product_id: 'prod-1' }],
+    'SELECT COUNT(*)': [{ count: '0' }],
+  });
+  const app = buildApp({ pool });
+  const res = await app.inject({
+    method: 'DELETE', url: '/v1/admin/products/prod-1',
+    headers: { authorization: 'Bearer demo-token-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' },
+  });
+  assert.equal(res.statusCode, 204);
+  await app.close();
+});
+
+test('DELETE /v1/admin/products/:id rejeita produto com pedidos', async () => {
+  const pool = buildPool({
+    'FROM auth_sessions': [validSession],
+    'SELECT id AS product_id FROM products': [{ product_id: 'prod-1' }],
+    'SELECT COUNT(*)': [{ count: '3' }],
+  });
+  const app = buildApp({ pool });
+  const res = await app.inject({
+    method: 'DELETE', url: '/v1/admin/products/prod-1',
+    headers: { authorization: 'Bearer demo-token-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' },
+  });
+  assert.equal(res.statusCode, 422);
+  assert.equal(res.json().error.code, 'product_has_orders');
   await app.close();
 });

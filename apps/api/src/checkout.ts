@@ -111,6 +111,7 @@ export function registerCheckoutRoutes(app: FastifyInstance, database: Transacti
     return {
       id: quoteId, status, fee: { amount_cents: fee, currency: rule.currency },
       distance_meters: distance, duration_seconds: durationSeconds,
+      route_source: route.source,
       expires_at: new Date(Date.now() + 15 * 60_000).toISOString(), rule_version: rule.version,
     };
   });

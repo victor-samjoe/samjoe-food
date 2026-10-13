@@ -120,6 +120,7 @@ class WorkerRouter {
   get(path: string, optionsOrHandler: RouteOptions | RouteHandler, handler?: RouteHandler) { this.register('GET', path, optionsOrHandler, handler); }
   post(path: string, optionsOrHandler: RouteOptions | RouteHandler, handler?: RouteHandler) { this.register('POST', path, optionsOrHandler, handler); }
   patch(path: string, optionsOrHandler: RouteOptions | RouteHandler, handler?: RouteHandler) { this.register('PATCH', path, optionsOrHandler, handler); }
+  delete(path: string, optionsOrHandler: RouteOptions | RouteHandler, handler?: RouteHandler) { this.register('DELETE', path, optionsOrHandler, handler); }
 }
 
 const clientContext = new AsyncLocalStorage<ApiDatabaseClient>();

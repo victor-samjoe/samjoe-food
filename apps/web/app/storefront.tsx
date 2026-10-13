@@ -7,22 +7,22 @@ type Money = { amount_cents: number; currency: string };
 type Variant = { id: string; sku: string; name: string; price: Money; available: boolean };
 type Product = { id: string; name: string; description: string | null; image_url: string | null; variants: Variant[] };
 type Category = { id: string | null; name: string | null; slug: string | null; products: Product[] };
-type StorefrontConfig = { brand_subtitle:string; hero_eyebrow:string; hero_title:string; hero_description:string; primary_color:string; accent_color:string; background_color:string; header_background_color:string; hero_image_enabled:boolean; hero_image_url:string|null; hero_image_size:'SMALL'|'MEDIUM'|'LARGE'; hero_display_mode:'CORNER'|'FULLSCREEN'|'FLAME'|'CAROUSEL'; hero_images:string[]; hero_section_size:'COMPACT'|'NORMAL'|'TALL'; hero_image_fit:'FILL'|'FIT'; hero_image_scale:number; hero_image_position_x:number; hero_image_position_y:number; logo_url:string|null; font_family:'CLASSIC'|'MODERN'|'ROUNDED'; text_case:'AS_TYPED'|'UPPERCASE'; hero_bg_type?:'GRADIENT'|'COLOR'|'IMAGE'; hero_bg_color?:string|null; hero_bg_image_url?:string|null; hero_bg_image_scale:number; hero_bg_position_x:number; hero_bg_position_y:number };
+type StorefrontConfig = { brand_subtitle:string; hero_eyebrow:string; hero_title:string; hero_description:string; primary_color:string; accent_color:string; background_color:string; header_background_color:string; brand_name_color:string; brand_subtitle_color:string; hero_eyebrow_color:string; hero_title_color:string; hero_description_color:string; hero_image_enabled:boolean; hero_image_url:string|null; hero_image_size:'SMALL'|'MEDIUM'|'LARGE'; hero_display_mode:'CORNER'|'FULLSCREEN'|'FLAME'|'CAROUSEL'; hero_images:string[]; hero_section_size:'COMPACT'|'NORMAL'|'TALL'; hero_image_fit:'FILL'|'FIT'; hero_image_scale:number; hero_image_position_x:number; hero_image_position_y:number; logo_url:string|null; font_family:'CLASSIC'|'MODERN'|'ROUNDED'; text_case:'AS_TYPED'|'UPPERCASE'; hero_bg_type?:'GRADIENT'|'COLOR'|'IMAGE'; hero_bg_color?:string|null; hero_bg_image_url?:string|null; hero_bg_image_scale:number; hero_bg_position_x:number; hero_bg_position_y:number };
 type Catalog = { store: { name: string; slug: string; timezone: string; storefront:Partial<StorefrontConfig> }; categories: Category[]; version: string };
 type CartItem = { productId: string; productName: string; imageUrl: string | null; variant: Variant; quantity: number };
 type Fulfillment = 'PICKUP' | 'DELIVERY';
 type PaymentMethod = 'CASH' | 'PIX' | 'MERCADO_PAGO';
 type CheckoutForm = {
   name: string; phone: string; fulfillment: Fulfillment; paymentMethod: PaymentMethod;
-  street: string; number: string; district: string; city: string; state: string; postalCode: string;
+  street: string; number: string; complement: string; district: string; city: string; state: string; postalCode: string;
 };
 type Suggestion = { product_id:string; product_name:string; description:string|null; image_url:string|null; variant_id:string; price_cents:number; currency:string; order_count:number };
 
 const initialForm: CheckoutForm = {
   name: '', phone: '', fulfillment: 'PICKUP', paymentMethod: 'CASH',
-  street: '', number: '', district: '', city: '', state: 'SP', postalCode: '',
+  street: '', number: '', complement: '', district: '', city: '', state: 'SP', postalCode: '',
 };
-const defaultStorefront:StorefrontConfig={brand_subtitle:'Confeitaria artesanal',hero_eyebrow:'feito com calma, servido com carinho',hero_title:'Um pedaço de doçura para deixar o dia mais leve.',hero_description:'Escolha seus favoritos, monte o carrinho e envie seu pedido em poucos passos.',primary_color:'#9f3f35',accent_color:'#e7b55f',background_color:'#fffaf4',header_background_color:'#ffffff',hero_image_enabled:true,hero_image_url:null,hero_image_size:'MEDIUM',hero_display_mode:'CORNER',hero_images:[],hero_section_size:'NORMAL',hero_image_fit:'FILL',hero_image_scale:1,hero_image_position_x:50,hero_image_position_y:50,logo_url:null,font_family:'CLASSIC',text_case:'AS_TYPED',hero_bg_image_scale:1,hero_bg_position_x:50,hero_bg_position_y:50};
+const defaultStorefront:StorefrontConfig={brand_subtitle:'Confeitaria artesanal',hero_eyebrow:'feito com calma, servido com carinho',hero_title:'Um pedaço de doçura para deixar o dia mais leve.',hero_description:'Escolha seus favoritos, monte o carrinho e envie seu pedido em poucos passos.',primary_color:'#9f3f35',accent_color:'#e7b55f',background_color:'#fffaf4',header_background_color:'#ffffff',brand_name_color:'#3f2d27',brand_subtitle_color:'#846f64',hero_eyebrow_color:'#9f3f35',hero_title_color:'#452d27',hero_description_color:'#795f53',hero_image_enabled:true,hero_image_url:null,hero_image_size:'MEDIUM',hero_display_mode:'CORNER',hero_images:[],hero_section_size:'NORMAL',hero_image_fit:'FILL',hero_image_scale:1,hero_image_position_x:50,hero_image_position_y:50,logo_url:null,font_family:'CLASSIC',text_case:'AS_TYPED',hero_bg_image_scale:1,hero_bg_position_x:50,hero_bg_position_y:50};
 
 function readCache(cacheKey:string):{logoUrl:string|null;storeName:string|null}{try{const v=localStorage.getItem(cacheKey);return v?JSON.parse(v) as {logoUrl:string|null;storeName:string|null}:{logoUrl:null,storeName:null};}catch{return{logoUrl:null,storeName:null};}}
 
@@ -78,7 +78,7 @@ export default function Storefront({ storeSlug }: { storeSlug: string }) {
           if(result.found){
             setForm(current=>({...current,...(result.name?{name:result.name}:{})}));
             const addr=result.address as Record<string,string>|null;
-            if(addr)setForm(current=>({...current,street:addr.street??current.street,number:addr.number??current.number,district:addr.district??current.district,city:addr.city??current.city,state:addr.state??current.state,postalCode:addr.postal_code??current.postalCode}));
+            if(addr)setForm(current=>({...current,street:addr.street??current.street,number:addr.number??current.number,complement:addr.complement??current.complement,district:addr.district??current.district,city:addr.city??current.city,state:addr.state??current.state,postalCode:addr.postal_code??current.postalCode}));
             const sugData=await jsonRequest<{personalized:boolean;suggestions:Suggestion[]}>(`/api/store/${encodedStoreSlug}/suggestions?phone=${encodeURIComponent(normalized)}`);
             setSuggestions(sugData.suggestions);setSuggestionsPersonalized(sugData.personalized);
           }
@@ -127,7 +127,7 @@ export default function Storefront({ storeSlug }: { storeSlug: string }) {
           if(result.found){
             setForm(current=>({...current,...(result.name?{name:result.name}:{})}));
             const addr = result.address as Record<string,string>|null;
-            if(addr) setForm(current=>({...current,street:addr.street??current.street,number:addr.number??current.number,district:addr.district??current.district,city:addr.city??current.city,state:addr.state??current.state,postalCode:addr.postal_code??current.postalCode}));
+            if(addr) setForm(current=>({...current,street:addr.street??current.street,number:addr.number??current.number,complement:addr.complement??current.complement,district:addr.district??current.district,city:addr.city??current.city,state:addr.state??current.state,postalCode:addr.postal_code??current.postalCode}));
             void loadSuggestions(value);
           }
         }catch{ /* silent */ }finally{setPhoneLoading(false);}
@@ -153,7 +153,7 @@ export default function Storefront({ storeSlug }: { storeSlug: string }) {
   const storefront={...defaultStorefront,...(catalog?.store.storefront??{})};
   const storeName=catalog?.store.name??cachedBrand.storeName??'SamJoE Food';
   const heroBgStyle=useMemo(():CSSProperties|undefined=>{if(storefront.hero_bg_type==='IMAGE'&&storefront.hero_bg_image_url)return{backgroundImage:`url(${storefront.hero_bg_image_url})`,backgroundSize:storefront.hero_bg_image_scale>1?`${Math.round(storefront.hero_bg_image_scale*100)}% auto`:'cover',backgroundPosition:`${storefront.hero_bg_position_x}% ${storefront.hero_bg_position_y}%`,backgroundRepeat:'no-repeat'};if(storefront.hero_bg_type==='COLOR'&&storefront.hero_bg_color)return{background:storefront.hero_bg_color};return undefined;},[storefront.hero_bg_type,storefront.hero_bg_image_url,storefront.hero_bg_color,storefront.hero_bg_image_scale,storefront.hero_bg_position_x,storefront.hero_bg_position_y]);
-  const storefrontStyle={'--store-primary':storefront.primary_color,'--store-accent':storefront.accent_color,'--store-background':storefront.background_color,'--store-header-background':storefront.header_background_color,'--store-font':storeFont(storefront.font_family),'--hero-fit':storefront.hero_image_fit==='FIT'?'contain':'cover'} as CSSProperties;
+  const storefrontStyle={'--store-primary':storefront.primary_color,'--store-accent':storefront.accent_color,'--store-background':storefront.background_color,'--store-header-background':storefront.header_background_color,'--store-brand-name':storefront.brand_name_color,'--store-brand-subtitle':storefront.brand_subtitle_color,'--store-hero-eyebrow':storefront.hero_eyebrow_color,'--store-hero-title':storefront.hero_title_color,'--store-hero-description':storefront.hero_description_color,'--store-font':storeFont(storefront.font_family),'--hero-fit':storefront.hero_image_fit==='FIT'?'contain':'cover'} as CSSProperties;
   const heroImageStyle={objectPosition:`${storefront.hero_image_position_x}% ${storefront.hero_image_position_y}%`,transform:`scale(${storefront.hero_image_scale})`} as CSSProperties;
   const heroImages = storefront.hero_images?.length ? storefront.hero_images : (storefront.hero_image_url ? [storefront.hero_image_url] : []);
 
@@ -195,7 +195,7 @@ export default function Storefront({ storeSlug }: { storeSlug: string }) {
     setSubmitting(true);
     setError('');
     const address = {
-      street: form.street, number: form.number, district: form.district, city: form.city,
+      street: form.street, number: form.number, complement: form.complement, district: form.district, city: form.city,
       state: form.state.toUpperCase(), postal_code: form.postalCode.replace(/\D/g, ''),
     };
     try {
@@ -279,7 +279,7 @@ export default function Storefront({ storeSlug }: { storeSlug: string }) {
       </section>
 
       <section className={styles.promise}><span>✦</span><div><strong>Pedido direto com a loja</strong><p>Escolha seus produtos e acompanhe cada etapa do pedido em um só lugar.</p></div></section>
-      <footer className={styles.footer}><span>{storeName} · tecnologia SamJoE Food</span><span>SamJoE Tech &amp; Consulting</span></footer>
+      <footer className={styles.footer}><span>SamJoE Tech &amp; Consulting</span></footer>
       {itemCount > 0 && <button className={styles.mobileCart} onClick={() => setCartOpen(true)}><b>{itemCount}</b><span>Ver carrinho</span><strong>{money(subtotal)}</strong></button>}
 
       {cartOpen && <>
@@ -292,7 +292,7 @@ export default function Storefront({ storeSlug }: { storeSlug: string }) {
               <div className={styles.cartDetails}><strong>{item.productName}</strong><small>{item.variant.name}</small><span>{money(item.variant.price.amount_cents)}</span></div>
               <div className={styles.quantity}><button onClick={() => changeQuantity(item.variant.id, -1)}>−</button><b>{item.quantity}</b><button onClick={() => changeQuantity(item.variant.id, 1)}>+</button></div>
             </div>)}</div>
-            {!checkoutOpen ? <div className={styles.cartFooter}><div><span>Subtotal</span><strong>{money(subtotal)}</strong></div><small>Taxa de entrega calculada na próxima etapa.</small><button className={styles.primaryButton} onClick={() => setCheckoutOpen(true)}>Continuar pedido</button></div>
+            {!checkoutOpen ? <div className={styles.cartFooter}><div><span>Subtotal</span><strong>{money(subtotal)}</strong></div><small>Taxa de entrega calculada na próxima etapa.</small><button className={styles.continueShoppingButton} onClick={() => setCartOpen(false)}>Continuar comprando</button><button className={styles.primaryButton} onClick={() => setCheckoutOpen(true)}>Continuar pedido</button></div>
               : <Checkout storeSlug={storeSlug} form={form} updateForm={updateForm} submitting={submitting} onConfirm={submitOrder} onBack={() => setCheckoutOpen(false)} phoneLoading={phoneLoading} onPhoneChange={handlePhoneChange} cartItems={cartItems} subtotal={subtotal}/>} 
           </>}
         </aside>
@@ -336,15 +336,61 @@ function Checkout({ storeSlug, form, updateForm, submitting, onConfirm, onBack, 
   const [quoteError, setQuoteError] = useState('');
   const [rawPhone, setRawPhone] = useState(() => form.phone.replace(/^\+55/, ''));
   const [summaryOpen, setSummaryOpen] = useState(false);
+  const [postalCodeLoading, setPostalCodeLoading] = useState(false);
+  const [verifiedPostalCode, setVerifiedPostalCode] = useState('');
+  const lastPostalCodeLookup = useRef('');
   const summaryCount = cartItems.reduce((total, item) => total + item.quantity, 0);
+
+  const lookupPostalCode = useCallback(async (rawPostalCode:string) => {
+    const postalCode = rawPostalCode.replace(/\D/g, '');
+    if (!/^\d{8}$/.test(postalCode)) {
+      setVerifiedPostalCode('');
+      setQuoteError('Informe um CEP com 8 dígitos.');
+      return;
+    }
+    lastPostalCodeLookup.current = postalCode;
+    setPostalCodeLoading(true);
+    setQuoteError('');
+    try {
+      const address = await jsonRequest<{postal_code:string;street:string;district:string;city:string;state:string}>(`/api/postal-code/${postalCode}`);
+      updateForm('postalCode', address.postal_code);
+      if(address.street) updateForm('street', address.street);
+      if(address.district) updateForm('district', address.district);
+      updateForm('city', address.city);
+      updateForm('state', address.state);
+      setVerifiedPostalCode(address.postal_code);
+    } catch (cause) {
+      setVerifiedPostalCode('');
+      setQuoteError(cause instanceof Error ? cause.message : 'Não foi possível consultar o CEP.');
+    } finally {
+      setPostalCodeLoading(false);
+    }
+  }, [updateForm]);
+
+  useEffect(() => {
+    const postalCode = form.postalCode.replace(/\D/g, '');
+    if (form.fulfillment === 'DELIVERY' && postalCode.length === 8 && lastPostalCodeLookup.current !== postalCode) {
+      void lookupPostalCode(postalCode);
+    }
+  }, [form.fulfillment, form.postalCode, lookupPostalCode]);
 
   async function handleContinue(event: FormEvent) {
     event.preventDefault();
     if (form.fulfillment === 'DELIVERY') {
+      const postalCode = form.postalCode.replace(/\D/g, '');
+      const missingAddress = !form.street.trim() || !form.number.trim() || !form.complement.trim() || !form.district.trim() || !form.city.trim() || !/^[A-Z]{2}$/.test(form.state.trim().toUpperCase());
+      if (postalCode !== verifiedPostalCode) {
+        setQuoteError('Busque e valide o CEP antes de continuar.');
+        return;
+      }
+      if (missingAddress) {
+        setQuoteError('Preencha rua, número, complemento, bairro, cidade e UF para continuar.');
+        return;
+      }
       setQuoteLoading(true);
       setQuoteError('');
       try {
-        const address = { street: form.street, number: form.number, district: form.district, city: form.city, state: form.state.toUpperCase(), postal_code: form.postalCode.replace(/\D/g, '') };
+        const address = { street: form.street.trim(), number: form.number.trim(), complement: form.complement.trim(), district: form.district.trim(), city: form.city.trim(), state: form.state.trim().toUpperCase(), postal_code: postalCode };
         const quote = await jsonRequest<{ id: string; status: string; fee: { amount_cents: number } }>(`/api/store/${encodedStoreSlug}/delivery-quotes`, {
           method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ address }),
         });
@@ -385,7 +431,7 @@ function Checkout({ storeSlug, form, updateForm, submitting, onConfirm, onBack, 
       <div className={styles.reviewInfo}>
         <div><span>Nome</span><strong>{form.name}</strong></div>
         <div><span>WhatsApp</span><strong>{form.phone}</strong></div>
-        {form.fulfillment === 'DELIVERY' && <div><span>Endereço</span><strong>{form.street}, {form.number} — {form.district}, {form.city}-{form.state}</strong></div>}
+        {form.fulfillment === 'DELIVERY' && <div><span>Endereço</span><strong>{form.street}, {form.number}, {form.complement} — {form.district}, {form.city}-{form.state}</strong></div>}
         <div><span>Modalidade</span><strong>{form.fulfillment === 'PICKUP' ? 'Retirada no local' : 'Entrega'}</strong></div>
         <div><span>Pagamento</span><strong>{payLabel}</strong></div>
       </div>
@@ -411,13 +457,15 @@ function Checkout({ storeSlug, form, updateForm, submitting, onConfirm, onBack, 
     <label>WhatsApp {phoneLoading&&<span className={styles.phoneSpinner}>…</span>}<div className={styles.phoneInput}><span className={styles.phonePrefix}>+55</span><input required placeholder="(11) 98765-4321" value={rawPhone} onChange={e=>{setRawPhone(e.target.value);onPhoneChange(normalizeBRPhone(e.target.value));}}/></div></label>
     <label>Seu nome<input required value={form.name} onChange={event => updateForm('name', event.target.value)} placeholder="Como prefere ser chamado?" /></label>
     {form.fulfillment === 'DELIVERY' && <div className={styles.addressFields}>
-      <label className={styles.wide}>Rua<input required value={form.street} onChange={event => updateForm('street', event.target.value)} /></label><label>Número<input required value={form.number} onChange={event => updateForm('number', event.target.value)} /></label>
+      <label className={styles.wide}>CEP<div className={styles.postalCodeField}><input required inputMode="numeric" autoComplete="postal-code" maxLength={9} value={form.postalCode} onChange={event => {const value=event.target.value;updateForm('postalCode',value);if(value.replace(/\D/g,'')!==verifiedPostalCode)setVerifiedPostalCode('');}} placeholder="00000-000"/><button type="button" disabled={postalCodeLoading||form.postalCode.replace(/\D/g,'').length!==8} onClick={()=>void lookupPostalCode(form.postalCode)}>{postalCodeLoading?'Buscando…':'Buscar CEP'}</button></div>{verifiedPostalCode&&<small className={styles.postalCodeSuccess}>✓ CEP localizado</small>}</label>
+      <label className={styles.wide}>Rua<input required autoComplete="address-line1" value={form.street} onChange={event => updateForm('street', event.target.value)} /></label><label>Número<input required autoComplete="address-line2" value={form.number} onChange={event => updateForm('number', event.target.value)} /></label>
+      <label>Complemento<input required value={form.complement} onChange={event => updateForm('complement', event.target.value)} placeholder="Apto., bloco ou casa" /></label>
       <label>Bairro<input required value={form.district} onChange={event => updateForm('district', event.target.value)} /></label><label>Cidade<input required value={form.city} onChange={event => updateForm('city', event.target.value)} /></label>
-      <label>UF<input required maxLength={2} value={form.state} onChange={event => updateForm('state', event.target.value)} /></label><label>CEP<input required inputMode="numeric" value={form.postalCode} onChange={event => updateForm('postalCode', event.target.value)} /></label>
+      <label>UF<input required maxLength={2} autoComplete="address-level1" value={form.state} onChange={event => updateForm('state', event.target.value)} /></label>
     </div>}
     <label>Pagamento<select value={form.paymentMethod} onChange={event => updateForm('paymentMethod', event.target.value as PaymentMethod)}><option value="CASH">Dinheiro na retirada/entrega</option><option value="PIX">Pix</option><option value="MERCADO_PAGO">Mercado Pago</option></select></label>
     {quoteError && <p className={styles.quoteError}>{quoteError}</p>}
-    <button className={styles.primaryButton} disabled={quoteLoading}>{quoteLoading ? 'Calculando frete…' : 'Revisar pedido →'}</button>
+    <button className={styles.primaryButton} disabled={quoteLoading||postalCodeLoading}>{quoteLoading ? 'Calculando frete…' : postalCodeLoading ? 'Localizando CEP…' : 'Revisar pedido →'}</button>
   </form>;
 }
 

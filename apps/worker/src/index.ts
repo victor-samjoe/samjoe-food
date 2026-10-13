@@ -1,10 +1,12 @@
 import { Worker, Queue } from 'bullmq';
 import pg from 'pg';
+import { createHmac } from 'node:crypto';
 import { redisConnection } from './redis.js';
 
 const QUEUE_NAME = 'foodapp-simulation';
 const EXPIRY_JOB = 'maintenance.expire-reservations';
 const RECONCILE_JOB = 'maintenance.reconcile-payments';
+const OUTBOX_JOB = 'dispatch.outbox';
 
 function log(level: 'info' | 'error', data: Record<string, unknown>) {
   const stream = level === 'error' ? process.stderr : process.stdout;
@@ -24,6 +26,9 @@ const worker = new Worker(QUEUE_NAME, async (job) => {
   }
   if (job.name === RECONCILE_JOB) {
     return reconcilePayments();
+  }
+  if (job.name === OUTBOX_JOB) {
+    return dispatchOutbox();
   }
   throw new Error(`unsupported_job:${job.name}`);
 }, {
@@ -100,6 +105,102 @@ async function reconcilePayments(): Promise<{ expired: number; logged: number }>
   }
 }
 
+async function dispatchOutbox(): Promise<{ dispatched: number; failed: number }> {
+  if (!pool) return { dispatched: 0, failed: 0 };
+
+  const salesEngineUrl = process.env.SALES_ENGINE_URL?.replace(/\/$/, '');
+  const salesEngineSecret = process.env.SALES_ENGINE_WEBHOOK_SECRET;
+  if (!salesEngineUrl || !salesEngineSecret) {
+    return { dispatched: 0, failed: 0 };
+  }
+
+  const client = await pool.connect();
+  try {
+    const { rows: events } = await client.query<{
+      id: string; tenant_id: string; event_type: string;
+      aggregate_id: string; payload: { from_status: string; to_status: string };
+    }>(`
+      UPDATE integration_outbox
+      SET status = 'PROCESSING', updated_at = now()
+      WHERE id IN (
+        SELECT id FROM integration_outbox
+        WHERE status = 'PENDING'
+        ORDER BY created_at
+        LIMIT 50
+      )
+      RETURNING id, tenant_id, event_type, aggregate_id, payload
+    `);
+
+    let dispatched = 0, failed = 0;
+
+    for (const event of events) {
+      try {
+        if (event.event_type === 'foodapp.order.status_changed.v1') {
+          const { rows } = await client.query<{
+            public_number: string; customer_id: string; phone_e164: string | null;
+          }>(`
+            SELECT o.public_number, o.customer_id, c.phone_e164
+            FROM orders o
+            JOIN customers c ON c.id = o.customer_id AND c.tenant_id = o.tenant_id
+            WHERE o.id = $1 AND o.tenant_id = $2
+          `, [event.aggregate_id, event.tenant_id]);
+
+          const order = rows[0];
+          if (order) {
+            const body = {
+              event_id: event.id,
+              event_type: 'order.status_changed',
+              occurred_at: new Date().toISOString(),
+              customer: { external_id: order.customer_id, phone: order.phone_e164 },
+              order: {
+                external_id: event.aggregate_id,
+                ref: order.public_number,
+                from_status: event.payload.from_status,
+                to_status: event.payload.to_status,
+              },
+            };
+            const bodyStr = JSON.stringify(body);
+            const sig = 'sha256=' + createHmac('sha256', salesEngineSecret).update(bodyStr).digest('hex');
+            const res = await fetch(`${salesEngineUrl}/api/v1/integrations/samjoe-food/events`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'x-tenant-id': event.tenant_id,
+                'x-samjoe-food-signature': sig,
+                'x-samjoe-food-timestamp': new Date().toISOString(),
+              },
+              body: bodyStr,
+              signal: AbortSignal.timeout(10_000),
+            });
+            if (!res.ok) {
+              const err = await res.json().catch(() => ({}));
+              throw new Error(`Sales Engine ${res.status}: ${JSON.stringify(err)}`);
+            }
+          }
+        }
+
+        await client.query(
+          `UPDATE integration_outbox SET status = 'PUBLISHED', updated_at = now() WHERE id = $1`,
+          [event.id],
+        );
+        dispatched++;
+      } catch (err) {
+        await client.query(
+          `UPDATE integration_outbox SET status = 'FAILED', attempts = attempts + 1, updated_at = now() WHERE id = $1`,
+          [event.id],
+        );
+        log('error', { event: 'outbox_dispatch_failed', outbox_id: event.id, error: (err as Error).message });
+        failed++;
+      }
+    }
+
+    if (dispatched + failed > 0) log('info', { event: 'outbox_dispatched', dispatched, failed });
+    return { dispatched, failed };
+  } finally {
+    client.release();
+  }
+}
+
 worker.on('ready', () => log('info', { event: 'ready', integrations: 'disabled' }));
 worker.on('completed', (job, result) => log('info', { event: 'job_completed', job_id: job.id, job_name: job.name, result }));
 worker.on('failed', (job, error) => log('error', { event: 'job_failed', job_id: job?.id, job_name: job?.name, error: error.message }));
@@ -108,6 +209,7 @@ worker.on('error', (error) => log('error', { event: 'worker_error', error: error
 const queue = new Queue(QUEUE_NAME, { connection: redisConnection() });
 await queue.upsertJobScheduler(EXPIRY_JOB, { every: 5 * 60_000 }, { name: EXPIRY_JOB, data: {} });
 await queue.upsertJobScheduler(RECONCILE_JOB, { every: 15 * 60_000 }, { name: RECONCILE_JOB, data: {} });
+await queue.upsertJobScheduler(OUTBOX_JOB, { every: 60_000 }, { name: OUTBOX_JOB, data: {} });
 
 const shutdown = async (signal: string) => {
   log('info', { event: 'shutdown', signal });

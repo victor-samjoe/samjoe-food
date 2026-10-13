@@ -24,6 +24,7 @@ type AdminProductRow = {
   inventory_policy: string | null;
   variant_active: boolean | null;
   legacy_id: string | null;
+  has_orders: boolean;
 };
 
 type StoreRow = {
@@ -86,6 +87,11 @@ export function registerCatalogAdminRoutes(app: FastifyInstance, database: Trans
         accent_color: { type: 'string', pattern: '^#[0-9a-fA-F]{6}$' },
         background_color: { type: 'string', pattern: '^#[0-9a-fA-F]{6}$' },
         header_background_color: { type: 'string', pattern: '^#[0-9a-fA-F]{6}$' },
+        brand_name_color: { type: 'string', pattern: '^#[0-9a-fA-F]{6}$' },
+        brand_subtitle_color: { type: 'string', pattern: '^#[0-9a-fA-F]{6}$' },
+        hero_eyebrow_color: { type: 'string', pattern: '^#[0-9a-fA-F]{6}$' },
+        hero_title_color: { type: 'string', pattern: '^#[0-9a-fA-F]{6}$' },
+        hero_description_color: { type: 'string', pattern: '^#[0-9a-fA-F]{6}$' },
         hero_image_enabled: { type: 'boolean' },
         hero_image_url: { type: ['string','null'], maxLength: 1500000 },
         hero_image_size: { enum: ['SMALL','MEDIUM','LARGE'] },
@@ -203,7 +209,12 @@ export function registerCatalogAdminRoutes(app: FastifyInstance, database: Trans
         v.currency,
         v.inventory_policy,
         v.is_active AS variant_active,
-        ei.external_id AS legacy_id
+        ei.external_id AS legacy_id,
+        EXISTS(
+          SELECT 1 FROM order_items oi
+          JOIN product_variants pv2 ON pv2.id = oi.variant_id
+          WHERE pv2.product_id = p.id AND oi.tenant_id = p.tenant_id
+        ) AS has_orders
       FROM stores s
       JOIN products p ON p.tenant_id = s.tenant_id AND p.store_id = s.id
       LEFT JOIN categories c ON c.tenant_id = p.tenant_id AND c.id = p.category_id
@@ -229,7 +240,7 @@ export function registerCatalogAdminRoutes(app: FastifyInstance, database: Trans
     type ProductEntry = {
       id: string; name: string; description: string | null; is_active: boolean; is_archived: boolean;
       cover_image_url: string | null;
-      category: { id: string | null; name: string | null } | null; legacy_id: string | null;
+      category: { id: string | null; name: string | null } | null; legacy_id: string | null; has_orders: boolean;
       variants: Array<{ id: string; sku: string; name: string; price_cents: number; currency: string; inventory_policy: string | null; is_active: boolean }>;
     };
     const products = new Map<string, ProductEntry>();
@@ -242,6 +253,7 @@ export function registerCatalogAdminRoutes(app: FastifyInstance, database: Trans
           cover_image_url: row.cover_image_url ?? null,
           category: row.category_id ? { id: row.category_id, name: row.category_name } : null,
           legacy_id: row.legacy_id,
+          has_orders: row.has_orders ?? false,
           variants: [],
         });
       }
@@ -308,7 +320,7 @@ export function registerCatalogAdminRoutes(app: FastifyInstance, database: Trans
     },
   );
 
-  app.patch<{ Params: ProductIdParams; Body: { name?: string; description?: string | null; is_active?: boolean; is_archived?: boolean; cover_image_url?: string | null } }>(
+  app.patch<{ Params: ProductIdParams; Body: { name?: string; description?: string | null; category_id?: string | null; is_active?: boolean; is_archived?: boolean; cover_image_url?: string | null } }>(
     '/v1/admin/products/:productId',
     {
       schema: {
@@ -317,6 +329,7 @@ export function registerCatalogAdminRoutes(app: FastifyInstance, database: Trans
           properties: {
             name: { type: 'string', minLength: 1, maxLength: 200 },
             description: { type: ['string', 'null'], maxLength: 1000 },
+            category_id: { type: ['string', 'null'], format: 'uuid' },
             is_active: { type: 'boolean' },
             is_archived: { type: 'boolean' },
             cover_image_url: { type: ['string', 'null'], maxLength: 750000 },
@@ -332,6 +345,7 @@ export function registerCatalogAdminRoutes(app: FastifyInstance, database: Trans
       const values: unknown[] = [request.params.productId, session.tenant_id];
       if (name !== undefined) { sets.push(`name = $${values.push(name)}`); }
       if (description !== undefined) { sets.push(`description = $${values.push(description)}`); }
+      if (request.body.category_id !== undefined) { sets.push(`category_id = $${values.push(request.body.category_id)}`); }
       if (is_active !== undefined) { sets.push(`is_active = $${values.push(is_active)}`); }
       if (is_archived !== undefined) {
         sets.push(`is_archived = $${values.push(is_archived)}`);
@@ -420,6 +434,36 @@ export function registerCatalogAdminRoutes(app: FastifyInstance, database: Trans
       );
       if (!rows[0]) throw new HttpError(404, 'variant_not_found', 'Variante não encontrada.');
       return { variant_id: rows[0].variant_id };
+    },
+  );
+
+  app.delete<{ Params: ProductIdParams }>(
+    '/v1/admin/products/:productId',
+    async (request, reply) => {
+      const session = await requireOperator(request, database);
+      return database.transaction(async tx => {
+        const { rows } = await tx.query<{ product_id: string }>(
+          `SELECT id AS product_id FROM products WHERE id = $1 AND tenant_id = $2 FOR UPDATE`,
+          [request.params.productId, session.tenant_id],
+        );
+        if (!rows[0]) throw new HttpError(404, 'product_not_found', 'Produto não encontrado.');
+        const { rows: orderRows } = await tx.query<{ count: string }>(
+          `SELECT COUNT(*) AS count FROM order_items oi
+           JOIN product_variants pv ON pv.id = oi.variant_id
+           WHERE pv.product_id = $1 AND oi.tenant_id = $2`,
+          [request.params.productId, session.tenant_id],
+        );
+        if (Number(orderRows[0]?.count ?? 0) > 0) {
+          throw new HttpError(422, 'product_has_orders', 'Produto com pedidos não pode ser excluído. Use o arquivamento.');
+        }
+        await tx.query(
+          `DELETE FROM external_identifiers WHERE entity_type = 'product' AND entity_id = $1 AND tenant_id = $2`,
+          [request.params.productId, session.tenant_id],
+        );
+        await tx.query(`DELETE FROM product_variants WHERE product_id = $1 AND tenant_id = $2`, [request.params.productId, session.tenant_id]);
+        await tx.query(`DELETE FROM products WHERE id = $1 AND tenant_id = $2`, [request.params.productId, session.tenant_id]);
+        return reply.status(204).send();
+      });
     },
   );
 
