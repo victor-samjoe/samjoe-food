@@ -96,14 +96,12 @@ export function registerControlCenterRoutes(app: FastifyInstance, database: Data
 
     const { rows: clients } = await database.query<{
       id: string; slug: string; trade_name: string; legal_name: string | null; status: string;
-      food_tenant_id: string | null; food_url: string | null; food_status: string | null;
-      sales_status: string | null; sales_url: string | null; stores_count: string;
+      food_tenant_id: string | null; stores_count: string;
       owner_email: string | null; primary_domain: string | null; domain_status: string | null;
       monthly_amount_cents: string;
     }>(`
       SELECT client.id, client.slug, client.trade_name, client.legal_name, client.status,
-        food.external_tenant_id AS food_tenant_id, food.base_url AS food_url, food.status AS food_status,
-        sales.status AS sales_status, sales.base_url AS sales_url,
+        food.external_tenant_id AS food_tenant_id,
         (SELECT count(*)::text FROM public.stores store WHERE store.tenant_id = food.external_tenant_id) AS stores_count,
         (SELECT profile.contact_email FROM public.tenant_onboarding_profiles profile
           WHERE profile.tenant_id = food.external_tenant_id) AS owner_email,
@@ -120,23 +118,66 @@ export function registerControlCenterRoutes(app: FastifyInstance, database: Data
       FROM control_plane.clients client
       LEFT JOIN control_plane.client_systems food
         ON food.client_id = client.id AND food.system_code = 'food_app' AND food.environment = 'PRODUCTION'
-      LEFT JOIN control_plane.client_systems sales
-        ON sales.client_id = client.id AND sales.system_code = 'sales_engine' AND sales.environment = 'PRODUCTION'
       ORDER BY client.created_at DESC
+    `);
+
+    const { rows: products } = await database.query<{
+      client_id: string; code: string; name: string; status: string; base_url: string | null;
+    }>(`
+      SELECT client_system.client_id, system.code, system.name,
+        client_system.status, client_system.base_url
+      FROM control_plane.client_systems client_system
+      JOIN control_plane.systems system ON system.code = client_system.system_code
+      WHERE client_system.environment = 'PRODUCTION' AND system.status = 'ACTIVE'
+      ORDER BY system.name
+    `);
+
+    const { rows: integrations } = await database.query<{
+      client_id: string; code: string; name: string; parent_system_code: string;
+      status: string; last_checked_at: string | null;
+    }>(`
+      SELECT client_integration.client_id, integration.code, integration.name,
+        integration.parent_system_code, client_integration.status,
+        client_integration.last_checked_at::text
+      FROM control_plane.client_integrations client_integration
+      JOIN control_plane.integrations integration
+        ON integration.code = client_integration.integration_code
+      WHERE client_integration.environment = 'PRODUCTION' AND integration.status = 'ACTIVE'
+      ORDER BY integration.name
     `);
 
     const normalized = clients.map((client) => ({
       ...client,
       stores_count: Number(client.stores_count),
       monthly_amount_cents: Number(client.monthly_amount_cents),
+      products: Object.fromEntries(products
+        .filter((product) => product.client_id === client.id)
+        .map((product) => [product.code, {
+          name: product.name, status: product.status, url: product.base_url,
+        }])),
+      integrations: Object.fromEntries(integrations
+        .filter((integration) => integration.client_id === client.id)
+        .map((integration) => [integration.code, {
+          name: integration.name,
+          parent_system_code: integration.parent_system_code,
+          status: integration.status,
+          last_checked_at: integration.last_checked_at,
+        }])),
     }));
+    const productStatus = (client: typeof normalized[number], code: string) =>
+      client.products[code]?.status;
+    const integrationStatus = (client: typeof normalized[number], code: string) =>
+      client.integrations[code]?.status;
     return {
       user: { id: session.admin_user_id, email: session.email, display_name: session.display_name, role: session.role },
       summary: {
         clients: normalized.length,
         active_clients: normalized.filter((client) => client.status === 'ACTIVE').length,
-        active_food: normalized.filter((client) => client.food_status === 'ACTIVE').length,
-        active_sales: normalized.filter((client) => client.sales_status === 'ACTIVE').length,
+        active_food: normalized.filter((client) => productStatus(client, 'food_app') === 'ACTIVE').length,
+        active_sales: normalized.filter((client) => productStatus(client, 'sales_engine') === 'ACTIVE').length,
+        active_sites: normalized.filter((client) => productStatus(client, 'site') === 'ACTIVE').length,
+        active_legal: normalized.filter((client) => productStatus(client, 'legal') === 'ACTIVE').length,
+        connected_whatsapp: normalized.filter((client) => integrationStatus(client, 'whatsapp') === 'CONNECTED').length,
         monthly_revenue_cents: normalized.reduce((total, client) => total + client.monthly_amount_cents, 0),
       },
       clients: normalized,

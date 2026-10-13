@@ -47,11 +47,19 @@ test('GET /v1/control/overview lista clientes e produtos contratados', async () 
     'FROM control_plane.admin_sessions': [controlSession],
     'FROM control_plane.clients client': [{
       id: 'client-1', slug: 'samjoe-confeitaria', trade_name: 'SamJoE Confeitaria', legal_name: null,
-      status: 'ACTIVE', food_tenant_id: 'tenant-1', food_url: 'https://food.test/loja/samjoe-confeitaria',
-      food_status: 'ACTIVE', sales_status: 'AVAILABLE', sales_url: null, stores_count: '1',
+      status: 'ACTIVE', food_tenant_id: 'tenant-1', stores_count: '1',
       owner_email: null, primary_domain: 'app.confeitaria.samjoe.com.br', domain_status: 'PENDING',
       monthly_amount_cents: '0',
     }],
+    'FROM control_plane.client_systems client_system': [
+      { client_id: 'client-1', code: 'food_app', name: 'SamJoE Food', status: 'ACTIVE', base_url: 'https://food.test/loja/samjoe-confeitaria' },
+      { client_id: 'client-1', code: 'sales_engine', name: 'SamJoE Sales Engine', status: 'AVAILABLE', base_url: null },
+      { client_id: 'client-1', code: 'site', name: 'Site', status: 'AVAILABLE', base_url: null },
+      { client_id: 'client-1', code: 'legal', name: 'SamJoE Jurídico', status: 'AVAILABLE', base_url: null },
+    ],
+    'FROM control_plane.client_integrations client_integration': [
+      { client_id: 'client-1', code: 'whatsapp', name: 'WhatsApp', parent_system_code: 'sales_engine', status: 'NOT_CONFIGURED', last_checked_at: null },
+    ],
   }) });
   const response = await app.inject({
     method: 'GET', url: '/v1/control/overview',
@@ -60,6 +68,9 @@ test('GET /v1/control/overview lista clientes e produtos contratados', async () 
   assert.equal(response.statusCode, 200);
   assert.equal(response.json().summary.clients, 1);
   assert.equal(response.json().summary.active_food, 1);
-  assert.equal(response.json().clients[0].sales_status, 'AVAILABLE');
+  assert.equal(response.json().summary.connected_whatsapp, 0);
+  assert.equal(response.json().clients[0].products.sales_engine.status, 'AVAILABLE');
+  assert.equal(response.json().clients[0].products.site.status, 'AVAILABLE');
+  assert.equal(response.json().clients[0].integrations.whatsapp.status, 'NOT_CONFIGURED');
   await app.close();
 });

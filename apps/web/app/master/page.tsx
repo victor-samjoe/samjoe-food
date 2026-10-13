@@ -3,6 +3,14 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import styles from './master.module.css';
 
+type Product = { name: string; status: string; url: string | null };
+type Integration = {
+  name: string;
+  parent_system_code: string;
+  status: string;
+  last_checked_at: string | null;
+};
+
 type Client = {
   id: string;
   slug: string;
@@ -19,6 +27,8 @@ type Client = {
   primary_domain: string | null;
   domain_status: string | null;
   monthly_amount_cents: number;
+  products: Record<string, Product>;
+  integrations: Record<string, Integration>;
 };
 
 type Overview = {
@@ -28,6 +38,9 @@ type Overview = {
     active_clients: number;
     active_food: number;
     active_sales: number;
+    active_sites: number;
+    active_legal: number;
+    connected_whatsapp: number;
     monthly_revenue_cents: number;
   };
   clients: Client[];
@@ -57,6 +70,31 @@ function StatusPill({ status }: { status: string | null }) {
   const active = normalized === 'ACTIVE';
   const available = normalized === 'AVAILABLE';
   return <span className={`${styles.pill} ${active ? styles.active : available ? styles.available : styles.neutral}`}>{normalized}</span>;
+}
+
+function MatrixStatusPill({ status }: { status: string | null }) {
+  const normalized = status ?? 'NOT_CONTRACTED';
+  const labels: Record<string, string> = {
+    ACTIVE: 'ATIVO', AVAILABLE: 'DISPONÍVEL', PROVISIONING: 'CONFIGURANDO',
+    SUSPENDED: 'SUSPENSO', ERROR: 'ERRO', DEGRADED: 'INSTÁVEL',
+    NOT_CONFIGURED: 'NÃO CONFIGURADO', CONNECTING: 'CONECTANDO',
+    CONNECTED: 'CONECTADO', DISCONNECTED: 'DESCONECTADO',
+    NOT_CONTRACTED: 'NÃO CONTRATADO', ONBOARDING: 'EM CADASTRO',
+  };
+  const positive = normalized === 'ACTIVE' || normalized === 'CONNECTED';
+  const available = normalized === 'AVAILABLE';
+  const danger = ['ERROR', 'DISCONNECTED', 'DEGRADED'].includes(normalized);
+  return <span className={`${styles.pill} ${positive ? styles.active : available ? styles.available : danger ? styles.danger : styles.neutral}`}>
+    {labels[normalized] ?? normalized}
+  </span>;
+}
+
+function ProductCell({ product, shortName }: { product: Product | undefined; shortName: string }) {
+  return <div className={styles.productCell}>
+    <strong>{shortName}</strong>
+    <MatrixStatusPill status={product?.status ?? null} />
+    {product?.url && <a href={product.url} target="_blank" rel="noreferrer">Abrir</a>}
+  </div>;
 }
 
 export default function MasterPage() {
@@ -151,6 +189,21 @@ export default function MasterPage() {
       <section id="clientes" className={styles.section}>
         <div className={styles.sectionHead}><div><span className={styles.eyebrow}>Carteira</span><h2>Clientes e produtos</h2></div><button disabled title="Disponível na próxima etapa">+ Novo cliente</button></div>
         <div className={styles.clientGrid}>
+          <div id="produtos" className={styles.tableWrap}>
+            <table className={styles.productTable}>
+              <thead><tr><th>Cliente</th><th>SamJoE Food</th><th>Sales Engine</th><th>Site</th><th>SamJoE Jurídico</th><th>WhatsApp <small>Sales Engine</small></th><th>Mensalidade</th><th>Ações</th></tr></thead>
+              <tbody>{overview.clients.map((client) => <tr key={client.id}>
+                <td><div className={styles.clientIdentity}><span>{client.trade_name.slice(0, 2).toUpperCase()}</span><div><strong>{client.trade_name}</strong><small>{client.owner_email ?? client.slug}</small><MatrixStatusPill status={client.status} /></div></div></td>
+                <td><ProductCell shortName="Food" product={client.products.food_app} /></td>
+                <td><ProductCell shortName="Sales" product={client.products.sales_engine} /></td>
+                <td><ProductCell shortName="Site" product={client.products.site} /></td>
+                <td><ProductCell shortName="Jurídico" product={client.products.legal} /></td>
+                <td><div className={styles.productCell}><strong>WhatsApp</strong><MatrixStatusPill status={client.integrations.whatsapp?.status ?? null} /><small>{client.integrations.whatsapp?.last_checked_at ? 'Verificado recentemente' : 'Sem conexão verificada'}</small></div></td>
+                <td className={styles.moneyCell}>{money(client.monthly_amount_cents)}</td>
+                <td><div className={styles.rowActions}>{client.products.food_app?.url && <a href={client.products.food_app.url} target="_blank" rel="noreferrer">Loja</a>}<a href="/admin" target="_blank">Admin</a></div></td>
+              </tr>)}</tbody>
+            </table>
+          </div>
           {overview.clients.map((client) => <article className={styles.clientCard} key={client.id}>
             <div className={styles.clientTitle}><div className={styles.clientAvatar}>{client.trade_name.slice(0, 2).toUpperCase()}</div><div><h3>{client.trade_name}</h3><p>{client.owner_email ?? 'Responsável ainda não ativado'}</p></div><StatusPill status={client.status} /></div>
             <div className={styles.clientFacts}><span><small>Identificador</small>{client.slug}</span><span><small>Lojas</small>{client.stores_count}</span><span><small>Mensalidade</small>{money(client.monthly_amount_cents)}</span></div>
