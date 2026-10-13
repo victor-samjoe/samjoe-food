@@ -3,6 +3,7 @@ import type { FastifyInstance, FastifyRequest } from 'fastify';
 import type { Database } from './catalog.js';
 
 type LoginBody = { tenant_slug: string; email: string; password: string };
+type ChangePasswordBody = { current_password: string; new_password: string };
 export type TenantRole = 'OWNER' | 'ADMIN' | 'OPERATOR' | 'VIEWER';
 type LoginRow = {
   user_id: string;
@@ -12,6 +13,7 @@ type LoginRow = {
   tenant_name: string;
   tenant_slug: string;
   role: TenantRole;
+  must_change_password?: boolean;
 };
 export type SessionRow = LoginRow & { session_id: string };
 
@@ -78,7 +80,8 @@ export function registerAuthRoutes(app: FastifyInstance, database: Database) {
         t.id AS tenant_id,
         t.name AS tenant_name,
         t.slug AS tenant_slug,
-        m.role
+        m.role,
+        u.must_change_password
       FROM users u
       JOIN tenant_memberships m ON m.user_id = u.id AND m.status = 'ACTIVE'
       JOIN tenants t ON t.id = m.tenant_id AND t.status = 'ACTIVE'
@@ -109,7 +112,44 @@ export function registerAuthRoutes(app: FastifyInstance, database: Database) {
       user: { id: identity.user_id, email: identity.email, display_name: identity.display_name },
       tenant: { id: identity.tenant_id, name: identity.tenant_name, slug: identity.tenant_slug },
       role: identity.role,
+      must_change_password: identity.must_change_password ?? false,
     };
+  });
+
+  app.post<{ Body: ChangePasswordBody }>('/v1/auth/change-password', {
+    schema: {
+      body: {
+        type: 'object', additionalProperties: false,
+        required: ['current_password', 'new_password'],
+        properties: {
+          current_password: { type: 'string', minLength: 8, maxLength: 200 },
+          new_password: { type: 'string', minLength: 12, maxLength: 200 },
+        },
+      },
+    },
+  }, async (request, reply) => {
+    const session = await resolveSession(request, database);
+    if (!session) return reply.status(401).send({
+      error: { code: 'unauthorized', message: 'Sessão ausente ou expirada.', request_id: request.id },
+    });
+    const { rows } = await database.query<{ id: string }>(`
+      SELECT id FROM users
+      WHERE id = $1 AND password_hash = crypt($2, password_hash)
+      LIMIT 1
+    `, [session.user_id, request.body.current_password]);
+    if (!rows[0]) return reply.status(401).send({
+      error: { code: 'invalid_current_password', message: 'Senha atual inválida.', request_id: request.id },
+    });
+    await database.query(`
+      UPDATE users SET password_hash = crypt($2, gen_salt('bf', 12)),
+        must_change_password = false, updated_at = now()
+      WHERE id = $1
+    `, [session.user_id, request.body.new_password]);
+    await database.query(`
+      UPDATE auth_sessions SET revoked_at = now()
+      WHERE user_id = $1 AND id <> $2 AND revoked_at IS NULL
+    `, [session.user_id, session.session_id]);
+    return { changed: true, must_change_password: false };
   });
 
   app.get('/v1/me', async (request, reply) => {

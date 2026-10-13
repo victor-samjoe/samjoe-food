@@ -52,10 +52,10 @@ test('GET /v1/control/overview lista clientes e produtos contratados', async () 
       monthly_amount_cents: '0',
     }],
     'FROM control_plane.client_systems client_system': [
-      { client_id: 'client-1', code: 'food_app', name: 'SamJoE Food', status: 'ACTIVE', base_url: 'https://food.test/loja/samjoe-confeitaria' },
-      { client_id: 'client-1', code: 'sales_engine', name: 'SamJoE Sales Engine', status: 'AVAILABLE', base_url: null },
-      { client_id: 'client-1', code: 'site', name: 'Site', status: 'AVAILABLE', base_url: null },
-      { client_id: 'client-1', code: 'legal', name: 'SamJoE Jurídico', status: 'AVAILABLE', base_url: null },
+      { client_id: 'client-1', code: 'food_app', name: 'SamJoE Food', status: 'ACTIVE', base_url: 'https://food.test/loja/samjoe-confeitaria', configuration: {}, plan_code: 'starter', billing_status: 'ACTIVE', monthly_amount_cents: '9900' },
+      { client_id: 'client-1', code: 'sales_engine', name: 'SamJoE Sales Engine', status: 'AVAILABLE', base_url: null, configuration: {}, plan_code: null, billing_status: null, monthly_amount_cents: '0' },
+      { client_id: 'client-1', code: 'site', name: 'Site', status: 'AVAILABLE', base_url: null, configuration: {}, plan_code: null, billing_status: null, monthly_amount_cents: '0' },
+      { client_id: 'client-1', code: 'legal', name: 'SamJoE Jurídico', status: 'AVAILABLE', base_url: null, configuration: {}, plan_code: null, billing_status: null, monthly_amount_cents: '0' },
     ],
     'FROM control_plane.client_integrations client_integration': [
       { client_id: 'client-1', code: 'whatsapp', name: 'WhatsApp', parent_system_code: 'sales_engine', status: 'NOT_CONFIGURED', last_checked_at: null },
@@ -71,6 +71,57 @@ test('GET /v1/control/overview lista clientes e produtos contratados', async () 
   assert.equal(response.json().summary.connected_whatsapp, 0);
   assert.equal(response.json().clients[0].products.sales_engine.status, 'AVAILABLE');
   assert.equal(response.json().clients[0].products.site.status, 'AVAILABLE');
+  assert.equal(response.json().clients[0].products.food_app.plan_code, 'starter');
   assert.equal(response.json().clients[0].integrations.whatsapp.status, 'NOT_CONFIGURED');
+  await app.close();
+});
+
+test('GET /v1/control/clients/:id/users lista acessos do Food', async () => {
+  const app = buildApp({ pool: poolWith({
+    'FROM control_plane.admin_sessions': [controlSession],
+    'FROM control_plane.client_systems client_system': [{
+      id: 'user-1', email: 'cliente@example.com', display_name: 'Cliente', status: 'ACTIVE',
+      role: 'ADMIN', membership_status: 'ACTIVE', must_change_password: false,
+    }],
+  }) });
+  const response = await app.inject({
+    method: 'GET', url: '/v1/control/clients/client-1/users',
+    headers: { authorization: 'Bearer token-master-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' },
+  });
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.json().users[0].email, 'cliente@example.com');
+  await app.close();
+});
+
+test('POST /v1/control/clients/:id/users cria senha temporária sem persistir texto puro', async () => {
+  const app = buildApp({ pool: poolWith({
+    'FROM control_plane.admin_sessions': [controlSession],
+    'SELECT external_tenant_id AS tenant_id': [{ tenant_id: 'tenant-1' }],
+    'SELECT id FROM public.users': [],
+    'INSERT INTO public.users': [{ id: 'user-new' }],
+  }) });
+  const response = await app.inject({
+    method: 'POST', url: '/v1/control/clients/client-1/users',
+    headers: { authorization: 'Bearer token-master-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' },
+    payload: { email: 'novo@example.com', display_name: 'Novo Cliente', role: 'ADMIN' },
+  });
+  assert.equal(response.statusCode, 201);
+  assert.equal(response.json().must_change_password, true);
+  assert.ok(response.json().temporary_password.length >= 20);
+  await app.close();
+});
+
+test('POST reset-password gera credencial temporária e revoga sessões', async () => {
+  const app = buildApp({ pool: poolWith({
+    'FROM control_plane.admin_sessions': [controlSession],
+    'FROM control_plane.client_systems client_system': [{ id: 'user-1', email: 'cliente@example.com' }],
+  }) });
+  const response = await app.inject({
+    method: 'POST', url: '/v1/control/clients/client-1/users/user-1/reset-password',
+    headers: { authorization: 'Bearer token-master-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' },
+  });
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.json().must_change_password, true);
+  assert.ok(response.json().temporary_password.length >= 20);
   await app.close();
 });

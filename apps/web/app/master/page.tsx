@@ -172,7 +172,7 @@ export default function MasterPage() {
   return <main className={styles.shell}>
     <aside className={styles.sidebar}>
       <div className={styles.logo}><span>SJ</span><div><strong>SamJoE</strong><small>Control Center</small></div></div>
-      <nav><a className={styles.navActive} href="#visao">Visão geral</a><a href="#clientes">Clientes</a><a href="#produtos">Produtos</a><a href="#financeiro">Financeiro</a><a href="#infra">Infraestrutura</a></nav>
+      <nav className={styles.sectionNav}><a className={styles.navActive} href="/master">Visão geral</a><a href="/master/clientes">Clientes</a><a href="/master/produtos">Produtos</a><a href="/master/financeiro">Financeiro</a><a href="/master/infraestrutura">Infraestrutura</a></nav>
       <div className={styles.owner}><span>{overview.user.display_name.slice(0, 1).toUpperCase()}</span><div><strong>{overview.user.display_name}</strong><small>Proprietário</small></div></div>
     </aside>
 
