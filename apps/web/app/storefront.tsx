@@ -7,7 +7,7 @@ type Money = { amount_cents: number; currency: string };
 type Variant = { id: string; sku: string; name: string; price: Money; available: boolean };
 type Product = { id: string; name: string; description: string | null; image_url: string | null; variants: Variant[] };
 type Category = { id: string | null; name: string | null; slug: string | null; products: Product[] };
-type StorefrontConfig = { brand_subtitle:string; hero_eyebrow:string; hero_title:string; hero_description:string; primary_color:string; accent_color:string; background_color:string; hero_image_enabled:boolean; hero_image_url:string|null; hero_image_size:'SMALL'|'MEDIUM'|'LARGE'; hero_display_mode:'CORNER'|'FULLSCREEN'|'FLAME'|'CAROUSEL'; hero_images:string[]; hero_section_size:'COMPACT'|'NORMAL'|'TALL'; hero_image_fit:'FILL'|'FIT'; logo_url:string|null; font_family:'CLASSIC'|'MODERN'|'ROUNDED'; text_case:'AS_TYPED'|'UPPERCASE'; hero_bg_type?:'GRADIENT'|'COLOR'|'IMAGE'; hero_bg_color?:string|null; hero_bg_image_url?:string|null };
+type StorefrontConfig = { brand_subtitle:string; hero_eyebrow:string; hero_title:string; hero_description:string; primary_color:string; accent_color:string; background_color:string; header_background_color:string; hero_image_enabled:boolean; hero_image_url:string|null; hero_image_size:'SMALL'|'MEDIUM'|'LARGE'; hero_display_mode:'CORNER'|'FULLSCREEN'|'FLAME'|'CAROUSEL'; hero_images:string[]; hero_section_size:'COMPACT'|'NORMAL'|'TALL'; hero_image_fit:'FILL'|'FIT'; hero_image_scale:number; hero_image_position_x:number; hero_image_position_y:number; logo_url:string|null; font_family:'CLASSIC'|'MODERN'|'ROUNDED'; text_case:'AS_TYPED'|'UPPERCASE'; hero_bg_type?:'GRADIENT'|'COLOR'|'IMAGE'; hero_bg_color?:string|null; hero_bg_image_url?:string|null; hero_bg_image_scale:number; hero_bg_position_x:number; hero_bg_position_y:number };
 type Catalog = { store: { name: string; slug: string; timezone: string; storefront:Partial<StorefrontConfig> }; categories: Category[]; version: string };
 type CartItem = { productId: string; productName: string; imageUrl: string | null; variant: Variant; quantity: number };
 type Fulfillment = 'PICKUP' | 'DELIVERY';
@@ -22,7 +22,7 @@ const initialForm: CheckoutForm = {
   name: '', phone: '', fulfillment: 'PICKUP', paymentMethod: 'CASH',
   street: '', number: '', district: '', city: '', state: 'SP', postalCode: '',
 };
-const defaultStorefront:StorefrontConfig={brand_subtitle:'Confeitaria artesanal',hero_eyebrow:'feito com calma, servido com carinho',hero_title:'Um pedaço de doçura para deixar o dia mais leve.',hero_description:'Escolha seus favoritos, monte o carrinho e envie seu pedido em poucos passos.',primary_color:'#9f3f35',accent_color:'#e7b55f',background_color:'#fffaf4',hero_image_enabled:true,hero_image_url:null,hero_image_size:'MEDIUM',hero_display_mode:'CORNER',hero_images:[],hero_section_size:'NORMAL',hero_image_fit:'FILL',logo_url:null,font_family:'CLASSIC',text_case:'AS_TYPED'};
+const defaultStorefront:StorefrontConfig={brand_subtitle:'Confeitaria artesanal',hero_eyebrow:'feito com calma, servido com carinho',hero_title:'Um pedaço de doçura para deixar o dia mais leve.',hero_description:'Escolha seus favoritos, monte o carrinho e envie seu pedido em poucos passos.',primary_color:'#9f3f35',accent_color:'#e7b55f',background_color:'#fffaf4',header_background_color:'#ffffff',hero_image_enabled:true,hero_image_url:null,hero_image_size:'MEDIUM',hero_display_mode:'CORNER',hero_images:[],hero_section_size:'NORMAL',hero_image_fit:'FILL',hero_image_scale:1,hero_image_position_x:50,hero_image_position_y:50,logo_url:null,font_family:'CLASSIC',text_case:'AS_TYPED',hero_bg_image_scale:1,hero_bg_position_x:50,hero_bg_position_y:50};
 
 function readCache(cacheKey:string):{logoUrl:string|null;storeName:string|null}{try{const v=localStorage.getItem(cacheKey);return v?JSON.parse(v) as {logoUrl:string|null;storeName:string|null}:{logoUrl:null,storeName:null};}catch{return{logoUrl:null,storeName:null};}}
 
@@ -152,8 +152,9 @@ export default function Storefront({ storeSlug }: { storeSlug: string }) {
   const subtotal = cartItems.reduce((sum, item) => sum + item.variant.price.amount_cents * item.quantity, 0);
   const storefront={...defaultStorefront,...(catalog?.store.storefront??{})};
   const storeName=catalog?.store.name??cachedBrand.storeName??'SamJoE Food';
-  const heroBgStyle=useMemo(():CSSProperties|undefined=>{if(storefront.hero_bg_type==='IMAGE'&&storefront.hero_bg_image_url)return{backgroundImage:`url(${storefront.hero_bg_image_url})`,backgroundSize:'cover',backgroundPosition:'center'};if(storefront.hero_bg_type==='COLOR'&&storefront.hero_bg_color)return{background:storefront.hero_bg_color};return undefined;},[storefront.hero_bg_type,storefront.hero_bg_image_url,storefront.hero_bg_color]);
-  const storefrontStyle={'--store-primary':storefront.primary_color,'--store-accent':storefront.accent_color,'--store-background':storefront.background_color,'--store-font':storeFont(storefront.font_family),'--hero-fit':storefront.hero_image_fit==='FIT'?'contain':'cover'} as CSSProperties;
+  const heroBgStyle=useMemo(():CSSProperties|undefined=>{if(storefront.hero_bg_type==='IMAGE'&&storefront.hero_bg_image_url)return{backgroundImage:`url(${storefront.hero_bg_image_url})`,backgroundSize:storefront.hero_bg_image_scale>1?`${Math.round(storefront.hero_bg_image_scale*100)}% auto`:'cover',backgroundPosition:`${storefront.hero_bg_position_x}% ${storefront.hero_bg_position_y}%`,backgroundRepeat:'no-repeat'};if(storefront.hero_bg_type==='COLOR'&&storefront.hero_bg_color)return{background:storefront.hero_bg_color};return undefined;},[storefront.hero_bg_type,storefront.hero_bg_image_url,storefront.hero_bg_color,storefront.hero_bg_image_scale,storefront.hero_bg_position_x,storefront.hero_bg_position_y]);
+  const storefrontStyle={'--store-primary':storefront.primary_color,'--store-accent':storefront.accent_color,'--store-background':storefront.background_color,'--store-header-background':storefront.header_background_color,'--store-font':storeFont(storefront.font_family),'--hero-fit':storefront.hero_image_fit==='FIT'?'contain':'cover'} as CSSProperties;
+  const heroImageStyle={objectPosition:`${storefront.hero_image_position_x}% ${storefront.hero_image_position_y}%`,transform:`scale(${storefront.hero_image_scale})`} as CSSProperties;
   const heroImages = storefront.hero_images?.length ? storefront.hero_images : (storefront.hero_image_url ? [storefront.hero_image_url] : []);
 
   function add(product: Product, variant: Variant) {
@@ -240,16 +241,16 @@ export default function Storefront({ storeSlug }: { storeSlug: string }) {
       </header>
 
       <section className={`${styles.hero} ${!storefront.hero_image_enabled?styles.heroWithoutImage:''} ${heroSectionClass(storefront.hero_section_size)} ${storefront.hero_image_enabled&&storefront.hero_display_mode==='FULLSCREEN'?styles.heroFullscreen:''}`} id="inicio" style={heroBgStyle}>
-        {storefront.hero_image_enabled&&storefront.hero_display_mode==='FULLSCREEN'&&heroImages[0]&&<img className={styles.heroFullscreenBg} src={heroImages[0]} alt="" aria-hidden="true"/>}
+        {storefront.hero_image_enabled&&storefront.hero_display_mode==='FULLSCREEN'&&heroImages[0]&&<img className={styles.heroFullscreenBg} style={heroImageStyle} src={heroImages[0]} alt="" aria-hidden="true"/>}
         <div className={styles.heroCopy}>
           <span className={styles.eyebrow}>{storefront.hero_eyebrow}</span>
           <h1>{storefront.hero_title}</h1>
           <p>{storefront.hero_description}</p>
           <a href="#cardapio" className={styles.heroAction}>Ver cardápio <span>↓</span></a>
         </div>
-        {storefront.hero_image_enabled&&storefront.hero_display_mode==='CAROUSEL'&&heroImages.length>0&&<HeroCarousel images={heroImages} storeName={storeName}/>}
-        {storefront.hero_image_enabled&&storefront.hero_display_mode==='CORNER'&&<div className={`${styles.heroArt} ${heroSizeClass(storefront.hero_image_size)}`} aria-hidden={!storefront.hero_image_url}>{storefront.hero_image_url?<img className={styles.heroImage} src={storefront.hero_image_url} alt={`Imagem principal de ${storeName}`}/>:<><div className={styles.sun}/><div className={styles.cake}><span/><i/></div><div className={styles.leafOne}>✦</div><div className={styles.leafTwo}>✦</div></>}</div>}
-        {storefront.hero_image_enabled&&storefront.hero_display_mode==='FLAME'&&heroImages[0]&&<div className={`${styles.heroArt} ${styles.heroFlame} ${heroSizeClass(storefront.hero_image_size)}`}><img className={styles.heroImage} src={heroImages[0]} alt={`Imagem principal de ${storeName}`}/></div>}
+        {storefront.hero_image_enabled&&storefront.hero_display_mode==='CAROUSEL'&&heroImages.length>0&&<HeroCarousel images={heroImages} storeName={storeName} imageStyle={heroImageStyle}/>}
+        {storefront.hero_image_enabled&&storefront.hero_display_mode==='CORNER'&&<div className={`${styles.heroArt} ${heroSizeClass(storefront.hero_image_size)}`} aria-hidden={!storefront.hero_image_url}>{storefront.hero_image_url?<img className={styles.heroImage} style={heroImageStyle} src={storefront.hero_image_url} alt={`Imagem principal de ${storeName}`}/>:<><div className={styles.sun}/><div className={styles.cake}><span/><i/></div><div className={styles.leafOne}>✦</div><div className={styles.leafTwo}>✦</div></>}</div>}
+        {storefront.hero_image_enabled&&storefront.hero_display_mode==='FLAME'&&heroImages[0]&&<div className={`${styles.heroArt} ${styles.heroFlame} ${heroSizeClass(storefront.hero_image_size)}`}><img className={styles.heroImage} style={heroImageStyle} src={heroImages[0]} alt={`Imagem principal de ${storeName}`}/></div>}
         {storefront.hero_image_enabled&&storefront.hero_display_mode==='FLAME'&&!heroImages[0]&&<div className={`${styles.heroArt} ${styles.heroFlame} ${heroSizeClass(storefront.hero_image_size)}`}><><div className={styles.sun}/><div className={styles.cake}><span/><i/></div><div className={styles.leafOne}>✦</div><div className={styles.leafTwo}>✦</div></></div>}
       </section>
 
@@ -420,7 +421,7 @@ function Checkout({ storeSlug, form, updateForm, submitting, onConfirm, onBack, 
   </form>;
 }
 
-function HeroCarousel({ images, storeName }: { images: string[]; storeName: string }) {
+function HeroCarousel({ images, storeName, imageStyle }: { images: string[]; storeName: string; imageStyle: CSSProperties }) {
   const [index, setIndex] = useState(0);
   const touchStart = useRef<number|null>(null);
   useEffect(() => {
@@ -437,7 +438,7 @@ function HeroCarousel({ images, storeName }: { images: string[]; storeName: stri
       if (start === null || end === undefined || Math.abs(end - start) < 40 || images.length < 2) return;
       setIndex(current => end < start ? (current + 1) % images.length : (current - 1 + images.length) % images.length);
     }}>
-    {images.map((src, i) => <img key={i} className={`${styles.carouselSlide} ${i === index ? styles.carouselSlideActive : ''}`} src={src} alt={i === 0 ? `Imagem principal de ${storeName}` : ''} aria-hidden={i !== index}/>)}
+    {images.map((src, i) => <img key={i} style={imageStyle} className={`${styles.carouselSlide} ${i === index ? styles.carouselSlideActive : ''}`} src={src} alt={i === 0 ? `Imagem principal de ${storeName}` : ''} aria-hidden={i !== index}/>)}
     {images.length > 1 && <div className={styles.carouselDots}>{images.map((_, i) => <button key={i} className={i === index ? styles.carouselDotActive : styles.carouselDot} onClick={() => setIndex(i)} aria-label={`Slide ${i + 1}`}/>)}</div>}
   </div>;
 }

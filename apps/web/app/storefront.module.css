@@ -1,5 +1,5 @@
 .page { min-height: 100vh; overflow-x: hidden; background: #f7f3ed; }
-.header { height: 78px; padding: 0 clamp(20px, 5vw, 72px); display: flex; align-items: center; justify-content: space-between; gap: 24px; background: rgba(255,255,255,.9); border-bottom: 1px solid #eadfd4; position: sticky; top: 0; z-index: 20; backdrop-filter: blur(18px); }
+.header { height: 78px; padding: 0 clamp(20px, 5vw, 72px); display: flex; align-items: center; justify-content: space-between; gap: 24px; background: color-mix(in srgb,var(--store-header-background,#fff) 90%,transparent); border-bottom: 1px solid #eadfd4; position: sticky; top: 0; z-index: 20; backdrop-filter: blur(18px); }
 .brand { display: flex; align-items: center; gap: 12px; color: #38241f; text-decoration: none; }
 .brandMark { width: 42px; height: 42px; border-radius: 50% 50% 46% 54%; display: grid; place-items: center; background: #9f3f35; color: #fffaf3; font: 700 14px Georgia, serif; letter-spacing: 1px; transform: rotate(-4deg); }
 .brand > span:last-child { display: grid; }
@@ -153,9 +153,9 @@
 .phoneSpinner{color:var(--store-primary);font-size:11px;font-weight:800;animation:loadingPulse .8s ease-in-out infinite}
 
 /* hero_image_fit: object-fit driven by --hero-fit CSS var */
-.heroImage{object-fit:var(--hero-fit,cover)}
-.heroFullscreenBg{object-fit:var(--hero-fit,cover)}
-.carouselSlide{object-fit:var(--hero-fit,cover)}
+.heroImage{object-fit:var(--hero-fit,cover);transform-origin:center;transition:transform .2s ease}
+.heroFullscreenBg{object-fit:var(--hero-fit,cover);transform-origin:center;transition:transform .2s ease}
+.carouselSlide{object-fit:var(--hero-fit,cover);transform-origin:center}
 
 /* Store intro animation */
 .introOverlay{position:fixed;inset:0;z-index:200;background:var(--store-background,#fffaf4);display:flex;align-items:center;justify-content:center;transition:opacity .45s ease}

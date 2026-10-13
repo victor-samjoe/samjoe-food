@@ -80,17 +80,18 @@ test('PATCH /v1/admin/stores/:storeSlug aceita fundo configurável do destaque',
     'FROM auth_sessions': [validSession],
     'UPDATE stores SET': [{
       store_id: 'store-a', store_slug: 'doce-horizonte-centro', store_name: 'Centro', currency: 'BRL',
-      storefront_config: { hero_bg_type: 'COLOR', hero_bg_color: '#fffaf4', hero_bg_image_url: null },
+      storefront_config: { hero_bg_type: 'COLOR', hero_bg_color: '#fffaf4', hero_bg_image_url: null, header_background_color: '#ffffff', hero_image_scale: 1.2, hero_image_position_x: 40, hero_image_position_y: 60 },
     }],
   });
   const app = buildApp({ pool });
   const res = await app.inject({
     method: 'PATCH', url: '/v1/admin/stores/doce-horizonte-centro',
     headers: { authorization: 'Bearer demo-token-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' },
-    payload: { storefront_config: { hero_bg_type: 'COLOR', hero_bg_color: '#fffaf4', hero_bg_image_url: null } },
+    payload: { storefront_config: { hero_bg_type: 'COLOR', hero_bg_color: '#fffaf4', hero_bg_image_url: null, header_background_color: '#ffffff', hero_image_scale: 1.2, hero_image_position_x: 40, hero_image_position_y: 60 } },
   });
   assert.equal(res.statusCode, 200);
   assert.equal(res.json().store.storefront_config.hero_bg_type, 'COLOR');
+  assert.equal(res.json().store.storefront_config.hero_image_position_x, 40);
   await app.close();
 });
 
