@@ -101,12 +101,18 @@ export function registerControlCenterRoutes(app: FastifyInstance, database: Tran
     const { rows: clients } = await database.query<{
       id: string; slug: string; trade_name: string; legal_name: string | null; status: string;
       food_tenant_id: string | null; stores_count: string;
+      active_users_count: string;
       owner_email: string | null; primary_domain: string | null; domain_status: string | null;
       monthly_amount_cents: string;
     }>(`
       SELECT client.id, client.slug, client.trade_name, client.legal_name, client.status,
         food.external_tenant_id AS food_tenant_id,
         (SELECT count(*)::text FROM public.stores store WHERE store.tenant_id = food.external_tenant_id) AS stores_count,
+        (SELECT count(*)::text
+          FROM public.tenant_memberships membership
+          JOIN public.users users ON users.id = membership.user_id
+          WHERE membership.tenant_id = food.external_tenant_id
+            AND membership.status = 'ACTIVE' AND users.status = 'ACTIVE') AS active_users_count,
         (SELECT profile.contact_email FROM public.tenant_onboarding_profiles profile
           WHERE profile.tenant_id = food.external_tenant_id) AS owner_email,
         (SELECT domain.hostname FROM public.store_domains domain
@@ -159,6 +165,7 @@ export function registerControlCenterRoutes(app: FastifyInstance, database: Tran
     const normalized = clients.map((client) => ({
       ...client,
       stores_count: Number(client.stores_count),
+      active_users_count: Number(client.active_users_count),
       monthly_amount_cents: Number(client.monthly_amount_cents),
       products: Object.fromEntries(products
         .filter((product) => product.client_id === client.id)
@@ -335,4 +342,77 @@ export function registerControlCenterRoutes(app: FastifyInstance, database: Tran
       };
     },
   );
+
+  app.patch<{
+    Params: { clientId: string; userId: string };
+    Body: { role?: 'OWNER' | 'ADMIN' | 'OPERATOR' | 'VIEWER'; status?: 'ACTIVE' | 'DISABLED' };
+  }>('/v1/control/clients/:clientId/users/:userId', {
+    schema: {
+      body: {
+        type: 'object', additionalProperties: false, minProperties: 1,
+        properties: {
+          role: { type: 'string', enum: ['OWNER', 'ADMIN', 'OPERATOR', 'VIEWER'] },
+          status: { type: 'string', enum: ['ACTIVE', 'DISABLED'] },
+        },
+      },
+    },
+  }, async (request, reply) => {
+    const session = await resolveControlSession(request, database);
+    if (!session) return reply.status(401).send({
+      error: { code: 'unauthorized', message: 'Sessão master ausente ou expirada.', request_id: request.id },
+    });
+    const { rows } = await database.query<{
+      tenant_id: string; role: string; membership_status: string; email: string;
+    }>(`
+      SELECT membership.tenant_id, membership.role,
+        membership.status AS membership_status, users.email
+      FROM control_plane.client_systems client_system
+      JOIN public.tenant_memberships membership
+        ON membership.tenant_id = client_system.external_tenant_id
+      JOIN public.users users ON users.id = membership.user_id
+      WHERE client_system.client_id = $1 AND client_system.system_code = 'food_app'
+        AND users.id = $2
+      LIMIT 1
+    `, [request.params.clientId, request.params.userId]);
+    const current = rows[0];
+    if (!current) return reply.status(404).send({
+      error: { code: 'user_not_found', message: 'Usuário não encontrado neste cliente.', request_id: request.id },
+    });
+
+    const removesOwner = current.role === 'OWNER'
+      && ((request.body.role !== undefined && request.body.role !== 'OWNER')
+        || request.body.status === 'DISABLED');
+    if (removesOwner) {
+      const { rows: owners } = await database.query<{ total: string }>(`
+        SELECT count(*)::text AS total FROM public.tenant_memberships
+        WHERE tenant_id = $1 AND role = 'OWNER' AND status = 'ACTIVE'
+      `, [current.tenant_id]);
+      if (Number(owners[0]?.total ?? 0) <= 1) return reply.status(409).send({
+        error: { code: 'last_owner', message: 'Crie ou promova outro proprietário antes de remover o último OWNER ativo.', request_id: request.id },
+      });
+    }
+
+    const { rows: updated } = await database.query<{
+      role: string; membership_status: string;
+    }>(`
+      UPDATE public.tenant_memberships
+      SET role = COALESCE($3, role), status = COALESCE($4, status), updated_at = now()
+      WHERE tenant_id = $1 AND user_id = $2
+      RETURNING role, status AS membership_status
+    `, [current.tenant_id, request.params.userId, request.body.role ?? null, request.body.status ?? null]);
+    if (request.body.status === 'DISABLED') {
+      await database.query(`
+        UPDATE public.auth_sessions SET revoked_at = now()
+        WHERE tenant_id = $1 AND user_id = $2 AND revoked_at IS NULL
+      `, [current.tenant_id, request.params.userId]);
+    }
+    await database.query(`
+      INSERT INTO control_plane.audit_events
+        (actor_admin_user_id, client_id, action, entity_type, entity_id, after_data)
+      VALUES ($1, $2, 'access.user_updated', 'food_user', $3,
+        jsonb_build_object('email', $4, 'role', $5, 'status', $6))
+    `, [session.admin_user_id, request.params.clientId, request.params.userId,
+      current.email, updated[0]?.role, updated[0]?.membership_status]);
+    return { user: { id: request.params.userId, email: current.email, ...updated[0] } };
+  });
 }

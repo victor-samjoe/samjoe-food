@@ -47,7 +47,7 @@ test('GET /v1/control/overview lista clientes e produtos contratados', async () 
     'FROM control_plane.admin_sessions': [controlSession],
     'FROM control_plane.clients client': [{
       id: 'client-1', slug: 'samjoe-confeitaria', trade_name: 'SamJoE Confeitaria', legal_name: null,
-      status: 'ACTIVE', food_tenant_id: 'tenant-1', stores_count: '1',
+      status: 'ACTIVE', food_tenant_id: 'tenant-1', stores_count: '1', active_users_count: '1',
       owner_email: null, primary_domain: 'app.confeitaria.samjoe.com.br', domain_status: 'PENDING',
       monthly_amount_cents: '0',
     }],
@@ -68,6 +68,7 @@ test('GET /v1/control/overview lista clientes e produtos contratados', async () 
   assert.equal(response.statusCode, 200);
   assert.equal(response.json().summary.clients, 1);
   assert.equal(response.json().summary.active_food, 1);
+  assert.equal(response.json().clients[0].active_users_count, 1);
   assert.equal(response.json().summary.connected_whatsapp, 0);
   assert.equal(response.json().clients[0].products.sales_engine.status, 'AVAILABLE');
   assert.equal(response.json().clients[0].products.site.status, 'AVAILABLE');
@@ -123,5 +124,22 @@ test('POST reset-password gera credencial temporária e revoga sessões', async 
   assert.equal(response.statusCode, 200);
   assert.equal(response.json().must_change_password, true);
   assert.ok(response.json().temporary_password.length >= 20);
+  await app.close();
+});
+
+test('PATCH usuário permite alterar perfil e situação do acesso', async () => {
+  const app = buildApp({ pool: poolWith({
+    'FROM control_plane.admin_sessions': [controlSession],
+    'SELECT membership.tenant_id': [{ tenant_id: 'tenant-1', role: 'ADMIN', membership_status: 'ACTIVE', email: 'cliente@example.com' }],
+    'UPDATE public.tenant_memberships': [{ role: 'VIEWER', membership_status: 'DISABLED' }],
+  }) });
+  const response = await app.inject({
+    method: 'PATCH', url: '/v1/control/clients/client-1/users/user-1',
+    headers: { authorization: 'Bearer token-master-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' },
+    payload: { role: 'VIEWER', status: 'DISABLED' },
+  });
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.json().user.role, 'VIEWER');
+  assert.equal(response.json().user.membership_status, 'DISABLED');
   await app.close();
 });

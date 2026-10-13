@@ -15,7 +15,7 @@ type Product = {
 type Client = {
   id: string; slug: string; trade_name: string; status: string;
   owner_email: string | null; primary_domain: string | null;
-  monthly_amount_cents: number; products: Record<string, Product>;
+  monthly_amount_cents: number; active_users_count: number; products: Record<string, Product>;
   integrations: Record<string, { name: string; status: string; last_checked_at: string | null }>;
 };
 type Overview = {
@@ -86,9 +86,9 @@ export default function MasterSectionPage({ section }: { section: Section }) {
     if (saved) void load(saved);
   }, [load]);
 
-  async function openAccess(client: Client) {
+  async function openAccess(client: Client, preserveCredential = false) {
     setSelected(client);
-    setCredential(null);
+    if (!preserveCredential) setCredential(null);
     setError('');
     if (!client.products.food_app) {
       setUsers([]);
@@ -119,7 +119,7 @@ export default function MasterSectionPage({ section }: { section: Section }) {
         }),
       });
       setCredential({ email: result.user.email, password: result.temporary_password });
-      await openAccess(selected);
+      await openAccess(selected, true);
       event.currentTarget.reset();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Falha ao criar acesso.');
@@ -135,9 +135,28 @@ export default function MasterSectionPage({ section }: { section: Section }) {
     try {
       const result = await api<{ temporary_password: string }>(`clients/${selected.id}/users/${user.id}/reset-password`, token, { method: 'POST' });
       setCredential({ email: user.email, password: result.temporary_password });
-      await openAccess(selected);
+      await openAccess(selected, true);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Falha ao redefinir senha.');
+    } finally {
+      setAccessBusy(false);
+    }
+  }
+
+  async function updateUser(user: FoodUser, changes: { role?: string; status?: string }) {
+    if (!selected) return;
+    const action = changes.status === 'DISABLED' ? 'desativar' : changes.status === 'ACTIVE' ? 'reativar' : 'alterar o perfil de';
+    if (!window.confirm(`Confirma ${action} ${user.email}?`)) return;
+    setAccessBusy(true);
+    setError('');
+    try {
+      await api(`clients/${selected.id}/users/${user.id}`, token, {
+        method: 'PATCH', body: JSON.stringify(changes),
+      });
+      await openAccess(selected, true);
+      await load(token);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Falha ao atualizar usuário.');
     } finally {
       setAccessBusy(false);
     }
@@ -162,8 +181,8 @@ export default function MasterSectionPage({ section }: { section: Section }) {
 
       {section === 'clients' && <section className={styles.sectionPanel}>
         <div className={styles.sectionHead}><div><h2>Clientes cadastrados</h2><p>{overview.summary.clients} empresas no ecossistema.</p></div></div>
-        <div className={styles.managementTable}><table><thead><tr><th>Cliente</th><th>Status</th><th>Produtos</th><th>Contato</th><th>Acesso</th></tr></thead><tbody>
-          {overview.clients.map((client) => <tr key={client.id}><td><strong>{client.trade_name}</strong><small>{client.slug}</small></td><td>{label(client.status)}</td><td>{Object.values(client.products).map((product) => product.name).join(', ') || 'Nenhum'}</td><td>{client.owner_email ?? 'Não informado'}</td><td><button onClick={() => void openAccess(client)}>Gerenciar acessos</button></td></tr>)}
+        <div className={styles.managementTable}><table><thead><tr><th>Cliente</th><th>Status</th><th>Produtos</th><th>Usuários ativos</th><th>Contato</th><th>Acesso</th></tr></thead><tbody>
+          {overview.clients.map((client) => <tr key={client.id}><td><strong>{client.trade_name}</strong><small>{client.slug}</small></td><td>{label(client.status)}</td><td>{Object.values(client.products).map((product) => product.name).join(', ') || 'Nenhum'}</td><td>{client.products.food_app ? client.active_users_count : '—'}</td><td>{client.owner_email ?? 'Não informado'}</td><td><button onClick={() => void openAccess(client)}>Gerenciar acessos</button></td></tr>)}
         </tbody></table></div>
       </section>}
 
@@ -196,7 +215,7 @@ export default function MasterSectionPage({ section }: { section: Section }) {
       <header><div><span className={styles.eyebrow}>Gestão de acesso</span><h2>{selected.trade_name}</h2></div><button onClick={() => setSelected(null)} aria-label="Fechar">×</button></header>
       {!selected.products.food_app ? <div className={styles.adapterNotice}><strong>Adaptador pendente</strong><p>A gestão centralizada de senhas para este produto será habilitada por API segura. Nenhuma credencial externa foi copiada para o Control Center.</p></div> : <>
         {credential && <div className={styles.credentialBox}><strong>Senha temporária — exibida uma vez</strong><span>{credential.email}</span><code>{credential.password}</code><button onClick={() => void navigator.clipboard.writeText(credential.password)}>Copiar senha</button></div>}
-        <div className={styles.userList}><h3>Usuários do SamJoE Food</h3>{accessBusy && <p>Atualizando…</p>}{users.map((user) => <div key={user.id}><span><strong>{user.display_name}</strong><small>{user.email} · {user.role}{user.must_change_password ? ' · troca pendente' : ''}</small></span><button disabled={accessBusy} onClick={() => void resetPassword(user)}>Redefinir senha</button></div>)}</div>
+        <div className={styles.userList}><h3>Usuários do SamJoE Food</h3>{accessBusy && <p>Atualizando…</p>}{!accessBusy && users.length === 0 && <p>Nenhum usuário criado.</p>}{users.map((user) => <div key={user.id}><span><strong>{user.display_name}</strong><small>{user.email} · {label(user.membership_status)}{user.must_change_password ? ' · troca pendente' : ''}</small></span><div className={styles.userActions}><select value={user.role} disabled={accessBusy} onChange={(event) => void updateUser(user, { role: event.target.value })}><option>OWNER</option><option>ADMIN</option><option>OPERATOR</option><option>VIEWER</option></select><button disabled={accessBusy} onClick={() => void resetPassword(user)}>Redefinir senha</button><button disabled={accessBusy} onClick={() => void updateUser(user, { status: user.membership_status === 'ACTIVE' ? 'DISABLED' : 'ACTIVE' })}>{user.membership_status === 'ACTIVE' ? 'Desativar' : 'Reativar'}</button></div></div>)}</div>
         <form className={styles.accessForm} onSubmit={createUser}><h3>Novo acesso</h3><label>Nome<input name="display_name" required minLength={2} /></label><label>E-mail<input name="email" type="email" required /></label><label>Perfil<select name="role" defaultValue="ADMIN"><option>OWNER</option><option>ADMIN</option><option>OPERATOR</option><option>VIEWER</option></select></label><button disabled={accessBusy}>Criar com senha temporária</button></form>
       </>}
     </section></div>}
