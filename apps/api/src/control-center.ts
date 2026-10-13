@@ -284,7 +284,7 @@ export function registerControlCenterRoutes(app: FastifyInstance, database: Tran
         INSERT INTO control_plane.audit_events
           (actor_admin_user_id, client_id, action, entity_type, entity_id, after_data)
         VALUES ($1, $2, 'access.user_created', 'food_user', $3,
-          jsonb_build_object('email', lower($4), 'role', $5))
+          jsonb_build_object('email', lower($4::text), 'role', $5::text))
       `, [session.admin_user_id, request.params.clientId, userId, request.body.email, request.body.role]);
       return userId;
     });
@@ -332,7 +332,7 @@ export function registerControlCenterRoutes(app: FastifyInstance, database: Tran
           INSERT INTO control_plane.audit_events
             (actor_admin_user_id, client_id, action, entity_type, entity_id, after_data)
           VALUES ($1, $2, 'access.password_reset', 'food_user', $3,
-            jsonb_build_object('email', $4, 'sessions_revoked', true))
+            jsonb_build_object('email', $4::text, 'sessions_revoked', true))
         `, [session.admin_user_id, request.params.clientId, user.id, user.email]);
       });
       return {
@@ -410,7 +410,7 @@ export function registerControlCenterRoutes(app: FastifyInstance, database: Tran
       INSERT INTO control_plane.audit_events
         (actor_admin_user_id, client_id, action, entity_type, entity_id, after_data)
       VALUES ($1, $2, 'access.user_updated', 'food_user', $3,
-        jsonb_build_object('email', $4, 'role', $5, 'status', $6))
+        jsonb_build_object('email', $4::text, 'role', $5::text, 'status', $6::text))
     `, [session.admin_user_id, request.params.clientId, request.params.userId,
       current.email, updated[0]?.role, updated[0]?.membership_status]);
     return { user: { id: request.params.userId, email: current.email, ...updated[0] } };
