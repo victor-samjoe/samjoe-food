@@ -78,7 +78,7 @@
 .primaryButton { background: #9f3f35; color: white; padding: 14px; box-shadow: 0 9px 22px rgba(129,48,40,.18); }.primaryButton:disabled { opacity: .55; cursor: progress; }
 .continueShoppingButton { width: 100%; margin: 0 0 9px; border: 1px solid color-mix(in srgb,var(--store-primary) 42%,white); border-radius: 3px; padding: 13px 15px; background: color-mix(in srgb,var(--store-primary) 9%,white); color: var(--store-primary); font-weight: 800; cursor: pointer; }.continueShoppingButton:hover { background: color-mix(in srgb,var(--store-primary) 16%,white); }
 .checkout { width: 100%; box-sizing: border-box; padding: 20px 26px 28px; display: grid; gap: 12px; min-width: 0; min-height: 0; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; }.checkout h3 { margin: 5px 0; font: 600 24px Georgia, serif; }
-.checkout label { display: grid; min-width: 0; gap: 5px; color: #6d574d; font-size: 12px; font-weight: 700; }.checkout input, .checkout select { width: 100%; min-width: 0; box-sizing: border-box; border: 1px solid #d8c9bd; border-radius: 3px; padding: 10px 11px; background: white; color: #352620; }
+.checkout label { display: grid; min-width: 0; gap: 5px; color: #6d574d; font-size: 12px; font-weight: 700; }.checkout input, .checkout select { width: 100%; min-width: 0; box-sizing: border-box; border: 1px solid #d8c9bd; border-radius: 3px; padding: 10px 11px; background: white; color: #352620; }.checkoutHint{margin:0;padding:9px 11px;border-radius:9px;background:#fff4df;color:#7a5620;font-size:12px;line-height:1.4}
 .backButton { justify-self: start; border: 0; background: transparent; color: #9f3f35; padding: 0; cursor: pointer; }
 .segmented { width: 100%; min-width: 0; box-sizing: border-box; display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); background: #eee4dc; padding: 3px; }.segmented button { min-width: 0; border: 0; padding: 9px; background: transparent; cursor: pointer; color: #766157; }.segmented .segmentActive { background: white; color: #8f392f; box-shadow: 0 2px 7px rgba(59,37,29,.1); font-weight: 800; }
 .addressFields { display: grid; grid-template-columns: minmax(0,2fr) minmax(0,1fr); min-width: 0; gap: 10px; }.addressFields .wide { grid-column: 1 / -1; }
@@ -212,3 +212,14 @@
   .heroCarousel{width:100%;height:clamp(180px,54vw,230px);touch-action:pan-y}.carouselSlide{border-radius:20px}.carouselDots{bottom:10px;z-index:2;padding:6px 8px;border-radius:99px;background:rgba(255,255,255,.82)}
   .checkoutReview{padding:14px 14px 18px;min-height:0;overflow-y:auto;overscroll-behavior:contain}
 }
+
+/* Store open/closed badge and cart notice */
+.openBadge,.closedBadge{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;padding:5px 12px;border-radius:99px;white-space:nowrap}
+.openBadge{background:#e3f2e1;color:#2d6f30}
+.openBadge::before{content:'';width:7px;height:7px;border-radius:50%;background:#3ea842;display:inline-block;flex-shrink:0}
+.closedBadge{background:#fde8e6;color:#9a3c34}
+.closedBadge::before{content:'';width:7px;height:7px;border-radius:50%;background:#c0392b;display:inline-block;flex-shrink:0}
+.storeClosedNotice{background:#fde8e6;border:1px solid #f4c9c5;border-radius:8px;padding:13px 15px;display:flex;flex-direction:column;gap:4px}
+.storeClosedNotice strong{font-size:13px;font-weight:800;color:#9a3c34}
+.storeClosedNotice span{font-size:12px;color:#8a5552;line-height:1.4}
+

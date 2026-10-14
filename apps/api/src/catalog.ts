@@ -9,6 +9,26 @@ export type TransactionalDatabase = Database & {
   transaction<T>(operation: (database: Database) => Promise<T>): Promise<T>;
 };
 
+type BusinessHoursDay = { open: boolean; from: string | null; to: string | null };
+
+function computeOpenNow(isOpen: boolean, businessHours: Record<string, BusinessHoursDay> | null, timezone: string): boolean {
+  if (!isOpen) return false;
+  if (!businessHours || Object.keys(businessHours).length === 0) return true;
+  const now = new Date();
+  const fmt = new Intl.DateTimeFormat('en-US', { timeZone: timezone, weekday: 'long', hour: '2-digit', minute: '2-digit', hour12: false });
+  const parts = fmt.formatToParts(now);
+  const weekday = parts.find(p => p.type === 'weekday')?.value?.toLowerCase();
+  const h = parseInt(parts.find(p => p.type === 'hour')?.value ?? '0', 10) % 24;
+  const m = parseInt(parts.find(p => p.type === 'minute')?.value ?? '0', 10);
+  if (!weekday) return true;
+  const currentMinutes = h * 60 + m;
+  const day = businessHours[weekday];
+  if (!day?.open || !day.from || !day.to) return false;
+  const [fh, fm] = day.from.split(':').map(Number);
+  const [th, tm] = day.to.split(':').map(Number);
+  return currentMinutes >= (fh ?? 0) * 60 + (fm ?? 0) && currentMinutes <= (th ?? 0) * 60 + (tm ?? 0);
+}
+
 type CatalogRow = {
   tenant_id: string;
   store_id: string;
@@ -32,6 +52,10 @@ type CatalogRow = {
   preorder_limit: number | null;
   stock_available: number | null;
   storefront_config: Record<string, unknown> | null;
+  delivery_status: 'PENDING' | 'ACTIVE';
+  is_open: boolean;
+  is_open_reason: string | null;
+  business_hours: Record<string, BusinessHoursDay> | null;
 };
 
 type StoreParams = { storeSlug: string };
@@ -45,6 +69,22 @@ function isVariantAvailable(row: CatalogRow): boolean {
 }
 
 export function registerCatalogRoutes(app: FastifyInstance, pool: Database) {
+  app.get<{ Params: { hostname: string } }>('/v1/public/domains/:hostname', async (request, reply) => {
+    const hostname = request.params.hostname.toLowerCase().replace(/:\d+$/, '');
+    const { rows } = await pool.query<{ store_slug: string }>(`
+      SELECT store.slug AS store_slug
+      FROM store_domains domain
+      JOIN stores store ON store.id=domain.store_id AND store.tenant_id=domain.tenant_id
+      WHERE lower(domain.hostname)=lower($1) AND domain.status='VERIFIED'
+        AND store.status='ACTIVE'
+      LIMIT 1
+    `, [hostname]);
+    if (!rows[0]) return reply.status(404).send({
+      error: { code: 'domain_not_found', message: 'Domínio não vinculado a uma loja ativa.', request_id: request.id },
+    });
+    return { store_slug: rows[0].store_slug };
+  });
+
   app.get<{ Params: StoreParams }>('/v1/public/stores/:storeSlug/catalog', async (request, reply) => {
     const { rows } = await pool.query<CatalogRow>(`
       SELECT
@@ -54,6 +94,10 @@ export function registerCatalogRoutes(app: FastifyInstance, pool: Database) {
         s.slug AS store_slug,
         s.timezone,
         s.storefront_config,
+        s.delivery_status,
+        COALESCE(s.is_open, true) AS is_open,
+        s.is_open_reason,
+        s.business_hours,
         c.id AS category_id,
         c.name AS category_name,
         c.slug AS category_slug,
@@ -128,14 +172,26 @@ export function registerCatalogRoutes(app: FastifyInstance, pool: Database) {
       }
     }
 
+    const open_now = computeOpenNow(first.is_open, first.business_hours, first.timezone);
     return {
-      store: { name: first.store_name, slug: first.store_slug, timezone: first.timezone, storefront: first.storefront_config ?? {} },
+      store: { name: first.store_name, slug: first.store_slug, timezone: first.timezone, storefront: first.storefront_config ?? {}, delivery_enabled: first.delivery_status === 'ACTIVE', is_open: first.is_open, open_now, reason_closed: !open_now ? (first.is_open_reason ?? null) : null },
       categories: categoryOrder.map(key => {
         const cat = categories.get(key)!;
         return { id: cat.id, name: cat.name, slug: cat.slug, products: [...cat.products.values()] };
       }),
       version: 'v1',
     };
+  });
+
+  app.get<{ Params: StoreParams }>('/v1/public/stores/:storeSlug/status', async (request, reply) => {
+    const { rows } = await pool.query<{ is_open: boolean; is_open_reason: string | null; business_hours: Record<string, BusinessHoursDay> | null; timezone: string }>(
+      `SELECT COALESCE(is_open, true) AS is_open, is_open_reason, business_hours, timezone FROM stores WHERE slug = $1 AND status = 'ACTIVE'`,
+      [request.params.storeSlug],
+    );
+    if (!rows[0]) return reply.status(404).send({ error: { code: 'store_not_found', message: 'Loja não encontrada.', request_id: request.id } });
+    const { is_open, is_open_reason, business_hours, timezone } = rows[0];
+    const open_now = computeOpenNow(is_open, business_hours, timezone);
+    return { open_now, is_open, reason_closed: !open_now ? (is_open_reason ?? null) : null, business_hours: business_hours ?? null, timezone };
   });
 
   // Public: look up a customer by phone number for checkout pre-fill

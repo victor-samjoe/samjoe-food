@@ -6,6 +6,7 @@ import { HttpError } from './errors.js';
 type StoreSlugParams = { storeSlug: string };
 type ProductIdParams = { productId: string };
 type VariantIdParams = { variantId: string };
+type CategoryIdParams = { categoryId: string };
 
 type AdminProductRow = {
   product_id: string;
@@ -30,12 +31,13 @@ type AdminProductRow = {
 type StoreRow = {
   store_id: string; store_slug: string; store_name: string; currency: string;
   timezone?: string; status?: string; origin_address?: Record<string, unknown> | null;
-  storefront_config?: Record<string, unknown>;
+  storefront_config?: Record<string, unknown>; delivery_status?: 'PENDING' | 'ACTIVE';
+  is_open?: boolean; is_open_reason?: string | null; business_hours?: Record<string, unknown> | null;
 };
 type DeliveryPricingRow = {
   id: string; version: string; base_fee_cents: number; included_meters: number;
   price_per_extra_km_cents: number; standard_radius_meters: number;
-  maximum_radius_meters: number; exception_fee_cents: number; is_active: boolean;
+  maximum_radius_meters: number; exception_fee_cents: number; free_delivery_radius_meters: number; is_active: boolean;
 };
 
 async function requireOperator(request: Parameters<typeof resolveSession>[0], database: Database) {
@@ -45,6 +47,11 @@ async function requireOperator(request: Parameters<typeof resolveSession>[0], da
     throw new HttpError(403, 'forbidden', 'Permissão insuficiente.');
   }
   return session;
+}
+
+function hasCompleteOriginAddress(address: Record<string, unknown> | null | undefined): boolean {
+  return ['street', 'number', 'district', 'city', 'state', 'postal_code']
+    .every(field => typeof address?.[field] === 'string' && String(address[field]).trim().length > 0);
 }
 
 export function registerCatalogAdminRoutes(app: FastifyInstance, database: TransactionalDatabase) {
@@ -60,7 +67,7 @@ export function registerCatalogAdminRoutes(app: FastifyInstance, database: Trans
   app.get<{ Params: StoreSlugParams }>('/v1/admin/stores/:storeSlug', async (request) => {
     const session = await requireOperator(request, database);
     const { rows } = await database.query<StoreRow>(`
-      SELECT id AS store_id,slug AS store_slug,name AS store_name,currency,timezone,status,origin_address,storefront_config
+      SELECT id AS store_id,slug AS store_slug,name AS store_name,currency,timezone,status,origin_address,storefront_config,delivery_status,is_open,is_open_reason,business_hours
       FROM stores WHERE slug=$1 AND tenant_id=$2
     `, [request.params.storeSlug, session.tenant_id]);
     if (!rows[0]) throw new HttpError(404, 'store_not_found', 'Loja não encontrada.');
@@ -71,12 +78,16 @@ export function registerCatalogAdminRoutes(app: FastifyInstance, database: Trans
     name?: string; timezone?: string; currency?: string; status?: 'ACTIVE' | 'INACTIVE';
     origin_address?: Record<string, unknown> | null;
     storefront_config?: Record<string, unknown>;
+    is_open?: boolean; is_open_reason?: string | null; business_hours?: Record<string, unknown> | null;
   } }>('/v1/admin/stores/:storeSlug', {
     schema: { body: { type: 'object', additionalProperties: false, minProperties: 1, properties: {
       name: { type: 'string', minLength: 1, maxLength: 160 },
       timezone: { type: 'string', minLength: 1, maxLength: 80 },
       currency: { type: 'string', pattern: '^[A-Z]{3}$' },
       status: { enum: ['ACTIVE','INACTIVE'] },
+      is_open: { type: 'boolean' },
+      is_open_reason: { type: ['string', 'null'], maxLength: 255 },
+      business_hours: { anyOf: [{ type: 'object' }, { type: 'null' }] },
       origin_address: { anyOf: [{ $ref: 'address#' }, { type: 'null' }] },
       storefront_config: { type: 'object', additionalProperties: false, properties: {
         brand_subtitle: { type: 'string', maxLength: 120 },
@@ -121,12 +132,20 @@ export function registerCatalogAdminRoutes(app: FastifyInstance, database: Trans
     if (request.body.timezone !== undefined) sets.push(`timezone=$${values.push(request.body.timezone)}`);
     if (request.body.currency !== undefined) sets.push(`currency=$${values.push(request.body.currency)}`);
     if (request.body.status !== undefined) sets.push(`status=$${values.push(request.body.status)}`);
+    if (request.body.is_open !== undefined) sets.push(`is_open=$${values.push(request.body.is_open)}`);
+    if (request.body.is_open_reason !== undefined) sets.push(`is_open_reason=$${values.push(request.body.is_open_reason)}`);
+    if (request.body.business_hours !== undefined) sets.push(`business_hours=$${values.push(request.body.business_hours !== null ? JSON.stringify(request.body.business_hours) : null)}${request.body.business_hours !== null ? '::jsonb' : ''}`);
     if (request.body.origin_address !== undefined) sets.push(`origin_address=$${values.push(JSON.stringify(request.body.origin_address))}::jsonb`);
+    if (request.body.origin_address !== undefined) {
+      sets.push(`delivery_status = CASE WHEN $${values.push(hasCompleteOriginAddress(request.body.origin_address))}
+        AND EXISTS (SELECT 1 FROM delivery_pricing_rules rule WHERE rule.tenant_id=$2 AND rule.store_id=stores.id AND rule.is_active)
+        THEN 'ACTIVE' ELSE 'PENDING' END`);
+    }
     if (request.body.storefront_config !== undefined) sets.push(`storefront_config=$${values.push(JSON.stringify(request.body.storefront_config))}::jsonb`);
     sets.push('updated_at=now()');
     const { rows } = await database.query<StoreRow>(`
       UPDATE stores SET ${sets.join(',')} WHERE slug=$1 AND tenant_id=$2
-      RETURNING id AS store_id,slug AS store_slug,name AS store_name,currency,timezone,status,origin_address,storefront_config
+      RETURNING id AS store_id,slug AS store_slug,name AS store_name,currency,timezone,status,origin_address,storefront_config,delivery_status,is_open,is_open_reason,business_hours
     `, values);
     if (!rows[0]) throw new HttpError(404, 'store_not_found', 'Loja não encontrada.');
     return { store: rows[0] };
@@ -136,7 +155,8 @@ export function registerCatalogAdminRoutes(app: FastifyInstance, database: Trans
     const session = await requireOperator(request, database);
     const { rows } = await database.query<DeliveryPricingRow>(`
       SELECT r.id,r.version,r.base_fee_cents,r.included_meters,r.price_per_extra_km_cents,
-        r.standard_radius_meters,r.maximum_radius_meters,r.exception_fee_cents,r.is_active
+        r.standard_radius_meters,r.maximum_radius_meters,r.exception_fee_cents,
+        r.free_delivery_radius_meters,r.is_active
       FROM delivery_pricing_rules r
       JOIN stores s ON s.id=r.store_id AND s.tenant_id=r.tenant_id
       WHERE s.slug=$1 AND r.tenant_id=$2 AND r.is_active
@@ -148,14 +168,16 @@ export function registerCatalogAdminRoutes(app: FastifyInstance, database: Trans
   app.patch<{ Params: StoreSlugParams; Body: {
     base_fee_cents: number; included_meters: number; price_per_extra_km_cents: number;
     standard_radius_meters: number; maximum_radius_meters: number; exception_fee_cents: number;
+    free_delivery_radius_meters: number;
   } }>('/v1/admin/stores/:storeSlug/delivery-pricing', {
     schema: { body: { type: 'object', additionalProperties: false, required: [
       'base_fee_cents','included_meters','price_per_extra_km_cents',
-      'standard_radius_meters','maximum_radius_meters','exception_fee_cents',
+      'standard_radius_meters','maximum_radius_meters','exception_fee_cents','free_delivery_radius_meters',
     ], properties: {
       base_fee_cents: { type: 'integer', minimum: 0 }, included_meters: { type: 'integer', minimum: 0 },
       price_per_extra_km_cents: { type: 'integer', minimum: 0 }, standard_radius_meters: { type: 'integer', minimum: 0 },
       maximum_radius_meters: { type: 'integer', minimum: 0 }, exception_fee_cents: { type: 'integer', minimum: 0 },
+      free_delivery_radius_meters: { type: 'integer', minimum: 0 },
     } } },
   }, async (request) => {
     const session = await requireOperator(request, database);
@@ -164,6 +186,9 @@ export function registerCatalogAdminRoutes(app: FastifyInstance, database: Trans
     }
     if (request.body.maximum_radius_meters < request.body.standard_radius_meters) {
       throw new HttpError(422, 'invalid_delivery_pricing', 'O raio máximo deve ser maior ou igual ao raio padrão.');
+    }
+    if (request.body.free_delivery_radius_meters > request.body.maximum_radius_meters) {
+      throw new HttpError(422, 'invalid_delivery_pricing', 'O limite de frete grátis não pode ultrapassar o raio máximo.');
     }
     return database.transaction(async tx => {
       const store = await tx.query<{ store_id: string }>(`
@@ -178,16 +203,56 @@ export function registerCatalogAdminRoutes(app: FastifyInstance, database: Trans
       const { rows } = await tx.query<DeliveryPricingRow>(`
         INSERT INTO delivery_pricing_rules (
           tenant_id,store_id,version,base_fee_cents,included_meters,price_per_extra_km_cents,
-          standard_radius_meters,maximum_radius_meters,exception_fee_cents,is_active
-        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,true)
+          standard_radius_meters,maximum_radius_meters,exception_fee_cents,free_delivery_radius_meters,is_active
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,true)
         RETURNING id,version,base_fee_cents,included_meters,price_per_extra_km_cents,
-          standard_radius_meters,maximum_radius_meters,exception_fee_cents,is_active
+          standard_radius_meters,maximum_radius_meters,exception_fee_cents,free_delivery_radius_meters,is_active
       `, [session.tenant_id, store.rows[0].store_id, version, request.body.base_fee_cents,
         request.body.included_meters, request.body.price_per_extra_km_cents,
         request.body.standard_radius_meters, request.body.maximum_radius_meters,
-        request.body.exception_fee_cents]);
+        request.body.exception_fee_cents, request.body.free_delivery_radius_meters]);
+      await tx.query(`
+        UPDATE stores SET delivery_status = CASE
+          WHEN origin_address ?& ARRAY['street','number','district','city','state','postal_code']
+            AND NOT EXISTS (
+              SELECT 1 FROM jsonb_each_text(origin_address) field
+              WHERE field.key = ANY(ARRAY['street','number','district','city','state','postal_code'])
+                AND btrim(field.value) = ''
+            )
+          THEN 'ACTIVE' ELSE 'PENDING' END,
+          updated_at = now()
+        WHERE id = $1 AND tenant_id = $2
+      `, [store.rows[0].store_id, session.tenant_id]);
       return { pricing: rows[0] };
     });
+  });
+
+  app.get<{ Params: StoreSlugParams }>('/v1/admin/stores/:storeSlug/delivery-diagnostics', async (request) => {
+    const session = await requireOperator(request, database);
+    const { rows } = await database.query<{
+      store_id: string; origin_address: Record<string, unknown> | null; delivery_status: string; has_active_rule: boolean;
+    }>(`
+      SELECT s.id AS store_id, s.origin_address, s.delivery_status,
+        EXISTS(SELECT 1 FROM delivery_pricing_rules rule
+          WHERE rule.tenant_id=s.tenant_id AND rule.store_id=s.id AND rule.is_active) AS has_active_rule
+      FROM stores s WHERE s.slug=$1 AND s.tenant_id=$2
+    `, [request.params.storeSlug, session.tenant_id]);
+    const store = rows[0];
+    if (!store) throw new HttpError(404, 'store_not_found', 'Loja não encontrada.');
+    const originComplete = hasCompleteOriginAddress(store.origin_address);
+    const googleConfigured = Boolean(process.env.GOOGLE_MAPS_API_KEY);
+    return {
+      delivery_status: store.delivery_status,
+      origin_complete: originComplete,
+      active_rule: store.has_active_rule,
+      google_routes_configured: googleConfigured,
+      expected_source: googleConfigured && originComplete ? 'google-routes-v2' : 'postal-prefix-v2',
+      warnings: [
+        ...(!originComplete ? ['Cadastre o endereço de saída completo para usar rotas reais.'] : []),
+        ...(!store.has_active_rule ? ['Cadastre uma regra de frete antes de habilitar entregas.'] : []),
+        ...(!googleConfigured ? ['A chave do Google Routes ainda não está configurada no ambiente.'] : []),
+      ],
+    };
   });
 
   app.get<{ Params: StoreSlugParams; Querystring: { include_archived?: string } }>('/v1/admin/stores/:storeSlug/products', async (request, reply) => {
@@ -299,6 +364,15 @@ export function registerCatalogAdminRoutes(app: FastifyInstance, database: Trans
         if (!storeRows[0]) throw new HttpError(404, 'store_not_found', 'Loja não encontrada.');
         const { store_id, currency } = storeRows[0];
 
+        if (category_id) {
+          const category = await tx.query(
+            `SELECT 1 FROM categories
+             WHERE id = $1 AND tenant_id = $2 AND store_id = $3 AND is_active`,
+            [category_id, session.tenant_id, store_id],
+          );
+          if (!category.rows[0]) throw new HttpError(422, 'invalid_category', 'Categoria não encontrada ou inativa nesta loja.');
+        }
+
         const { rows: productRows } = await tx.query<{ product_id: string }>(
           `INSERT INTO products (tenant_id, store_id, category_id, name, description, cover_image_url)
            VALUES ($1, $2, $3, $4, $5, $6) RETURNING id AS product_id`,
@@ -340,6 +414,17 @@ export function registerCatalogAdminRoutes(app: FastifyInstance, database: Trans
     async (request, reply) => {
       const session = await requireOperator(request, database);
       const { name, description, is_active, is_archived, cover_image_url } = request.body;
+
+      if (request.body.category_id) {
+        const { rows } = await database.query(
+          `SELECT 1
+           FROM products p
+           JOIN categories c ON c.id = $3 AND c.tenant_id = p.tenant_id AND c.store_id = p.store_id
+           WHERE p.id = $1 AND p.tenant_id = $2 AND c.is_active`,
+          [request.params.productId, session.tenant_id, request.body.category_id],
+        );
+        if (!rows[0]) throw new HttpError(422, 'invalid_category', 'Categoria não encontrada ou inativa nesta loja.');
+      }
 
       const sets: string[] = [];
       const values: unknown[] = [request.params.productId, session.tenant_id];
@@ -484,15 +569,18 @@ export function registerCatalogAdminRoutes(app: FastifyInstance, database: Trans
         [request.params.storeSlug, session.tenant_id],
       );
       if (!storeRows[0]) throw new HttpError(404, 'store_not_found', 'Loja não encontrada.');
-      const slug = request.body.name.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+      const name = request.body.name.trim();
+      const slug = name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+      if (!slug) throw new HttpError(422, 'invalid_category_name', 'Informe um nome de categoria válido.');
       const { rows } = await database.query<{ category_id: string }>(
-        `INSERT INTO categories (tenant_id, store_id, name, slug)
-         VALUES ($1, $2, $3, $4)
-         ON CONFLICT (tenant_id, store_id, slug) DO UPDATE SET name = EXCLUDED.name
+        `INSERT INTO categories (tenant_id, store_id, name, slug, sort_order)
+         SELECT $1, $2, $3, $4, COALESCE(MAX(sort_order), -1) + 1
+         FROM categories WHERE tenant_id = $1 AND store_id = $2
+         ON CONFLICT (tenant_id, store_id, slug) DO NOTHING
          RETURNING id AS category_id`,
-        [session.tenant_id, storeRows[0].store_id, request.body.name, slug],
+        [session.tenant_id, storeRows[0].store_id, name, slug],
       );
-      if (!rows[0]) throw new HttpError(500, 'internal_error', 'Erro ao criar categoria.');
+      if (!rows[0]) throw new HttpError(409, 'category_already_exists', 'Já existe uma categoria com esse nome nesta loja.');
       return reply.status(201).send({ category_id: rows[0].category_id });
     },
   );
@@ -501,13 +589,80 @@ export function registerCatalogAdminRoutes(app: FastifyInstance, database: Trans
     '/v1/admin/stores/:storeSlug/categories',
     async (request) => {
       const session = await requireOperator(request, database);
-      const { rows } = await database.query<{ category_id: string; name: string; slug: string }>(
-        `SELECT c.id AS category_id, c.name, c.slug
+      const { rows } = await database.query<{ category_id: string; name: string; slug: string; sort_order: number; is_active: boolean; product_count: number }>(
+        `SELECT c.id AS category_id, c.name, c.slug, c.sort_order, c.is_active,
+                COUNT(p.id)::integer AS product_count
          FROM categories c JOIN stores s ON s.id = c.store_id AND s.tenant_id = c.tenant_id
-         WHERE s.slug = $1 AND c.tenant_id = $2 ORDER BY c.sort_order, c.name`,
+         LEFT JOIN products p ON p.category_id = c.id AND p.tenant_id = c.tenant_id AND p.is_archived = false
+         WHERE s.slug = $1 AND c.tenant_id = $2
+         GROUP BY c.id, c.name, c.slug, c.sort_order, c.is_active
+         ORDER BY c.is_active DESC, c.sort_order, c.name`,
         [request.params.storeSlug, session.tenant_id],
       );
       return { categories: rows };
+    },
+  );
+
+  app.patch<{ Params: CategoryIdParams; Body: { name?: string; sort_order?: number; is_active?: boolean } }>(
+    '/v1/admin/categories/:categoryId',
+    {
+      schema: {
+        body: {
+          type: 'object', additionalProperties: false, minProperties: 1,
+          properties: {
+            name: { type: 'string', minLength: 1, maxLength: 120 },
+            sort_order: { type: 'integer', minimum: 0 },
+            is_active: { type: 'boolean' },
+          },
+        },
+      },
+    },
+    async (request) => {
+      const session = await requireOperator(request, database);
+      return database.transaction(async tx => {
+        const current = await tx.query<{ category_id: string; store_id: string }>(
+          `SELECT id AS category_id, store_id FROM categories
+           WHERE id = $1 AND tenant_id = $2 FOR UPDATE`,
+          [request.params.categoryId, session.tenant_id],
+        );
+        if (!current.rows[0]) throw new HttpError(404, 'category_not_found', 'Categoria não encontrada.');
+
+        if (request.body.is_active === false) {
+          const products = await tx.query<{ count: string }>(
+            `SELECT COUNT(*) AS count FROM products
+             WHERE category_id = $1 AND tenant_id = $2 AND is_archived = false`,
+            [request.params.categoryId, session.tenant_id],
+          );
+          if (Number(products.rows[0]?.count ?? 0) > 0) {
+            throw new HttpError(422, 'category_has_products', 'Mova os produtos para outra categoria antes de arquivar esta categoria.');
+          }
+        }
+
+        const sets: string[] = [];
+        const values: unknown[] = [request.params.categoryId, session.tenant_id];
+        if (request.body.name !== undefined) {
+          const name = request.body.name.trim();
+          const slug = name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+          if (!slug) throw new HttpError(422, 'invalid_category_name', 'Informe um nome de categoria válido.');
+          const duplicate = await tx.query(
+            `SELECT 1 FROM categories
+             WHERE tenant_id = $1 AND store_id = $2 AND slug = $3 AND id <> $4`,
+            [session.tenant_id, current.rows[0].store_id, slug, request.params.categoryId],
+          );
+          if (duplicate.rows[0]) throw new HttpError(409, 'category_already_exists', 'Já existe uma categoria com esse nome nesta loja.');
+          sets.push(`name = $${values.push(name)}`, `slug = $${values.push(slug)}`);
+        }
+        if (request.body.sort_order !== undefined) sets.push(`sort_order = $${values.push(request.body.sort_order)}`);
+        if (request.body.is_active !== undefined) sets.push(`is_active = $${values.push(request.body.is_active)}`);
+
+        const updated = await tx.query<{ category_id: string }>(
+          `UPDATE categories SET ${sets.join(', ')}
+           WHERE id = $1 AND tenant_id = $2 RETURNING id AS category_id`,
+          values,
+        );
+        if (!updated.rows[0]) throw new HttpError(404, 'category_not_found', 'Categoria não encontrada.');
+        return { category_id: updated.rows[0].category_id };
+      });
     },
   );
 }

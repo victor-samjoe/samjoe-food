@@ -8,7 +8,7 @@ type Variant = { id: string; sku: string; name: string; price: Money; available:
 type Product = { id: string; name: string; description: string | null; image_url: string | null; variants: Variant[] };
 type Category = { id: string | null; name: string | null; slug: string | null; products: Product[] };
 type StorefrontConfig = { brand_subtitle:string; hero_eyebrow:string; hero_title:string; hero_description:string; primary_color:string; accent_color:string; background_color:string; header_background_color:string; brand_name_color:string; brand_subtitle_color:string; hero_eyebrow_color:string; hero_title_color:string; hero_description_color:string; hero_image_enabled:boolean; hero_image_url:string|null; hero_image_size:'SMALL'|'MEDIUM'|'LARGE'; hero_display_mode:'CORNER'|'FULLSCREEN'|'FLAME'|'CAROUSEL'; hero_images:string[]; hero_section_size:'COMPACT'|'NORMAL'|'TALL'; hero_image_fit:'FILL'|'FIT'; hero_image_scale:number; hero_image_position_x:number; hero_image_position_y:number; logo_url:string|null; font_family:'CLASSIC'|'MODERN'|'ROUNDED'; text_case:'AS_TYPED'|'UPPERCASE'; hero_bg_type?:'GRADIENT'|'COLOR'|'IMAGE'; hero_bg_color?:string|null; hero_bg_image_url?:string|null; hero_bg_image_scale:number; hero_bg_position_x:number; hero_bg_position_y:number };
-type Catalog = { store: { name: string; slug: string; timezone: string; storefront:Partial<StorefrontConfig> }; categories: Category[]; version: string };
+type Catalog = { store: { name: string; slug: string; timezone: string; storefront:Partial<StorefrontConfig>; delivery_enabled?:boolean; is_open?:boolean; open_now?:boolean; reason_closed?:string|null }; categories: Category[]; version: string };
 type CartItem = { productId: string; productName: string; imageUrl: string | null; variant: Variant; quantity: number };
 type Fulfillment = 'PICKUP' | 'DELIVERY';
 type PaymentMethod = 'CASH' | 'PIX' | 'MERCADO_PAGO';
@@ -235,6 +235,11 @@ export default function Storefront({ storeSlug }: { storeSlug: string }) {
           {storefront.logo_url?<img className={styles.brandLogo} src={storefront.logo_url} alt={`Logo de ${storeName}`}/>:<span className={styles.brandMark}>{initials(storeName)}</span>}
           <span><strong>{storeName}</strong><small>{storefront.brand_subtitle}</small></span>
         </a>
+        {catalog && catalog.store.open_now !== undefined && (
+          <span className={catalog.store.open_now ? styles.openBadge : styles.closedBadge}>
+            {catalog.store.open_now ? 'Aberta' : 'Fechada'}
+          </span>
+        )}
         <button className={styles.cartButton} onClick={() => setCartOpen(true)} aria-label={`Abrir carrinho com ${itemCount} itens`}>
           <span>Carrinho</span><b>{itemCount}</b>
         </button>
@@ -292,8 +297,20 @@ export default function Storefront({ storeSlug }: { storeSlug: string }) {
               <div className={styles.cartDetails}><strong>{item.productName}</strong><small>{item.variant.name}</small><span>{money(item.variant.price.amount_cents)}</span></div>
               <div className={styles.quantity}><button onClick={() => changeQuantity(item.variant.id, -1)}>−</button><b>{item.quantity}</b><button onClick={() => changeQuantity(item.variant.id, 1)}>+</button></div>
             </div>)}</div>
-            {!checkoutOpen ? <div className={styles.cartFooter}><div><span>Subtotal</span><strong>{money(subtotal)}</strong></div><small>Taxa de entrega calculada na próxima etapa.</small><button className={styles.continueShoppingButton} onClick={() => setCartOpen(false)}>Continuar comprando</button><button className={styles.primaryButton} onClick={() => setCheckoutOpen(true)}>Continuar pedido</button></div>
-              : <Checkout storeSlug={storeSlug} form={form} updateForm={updateForm} submitting={submitting} onConfirm={submitOrder} onBack={() => setCheckoutOpen(false)} phoneLoading={phoneLoading} onPhoneChange={handlePhoneChange} cartItems={cartItems} subtotal={subtotal}/>} 
+            {!checkoutOpen ? <div className={styles.cartFooter}><div><span>Subtotal</span><strong>{money(subtotal)}</strong></div><small>Taxa de entrega calculada na próxima etapa.</small><button className={styles.continueShoppingButton} onClick={() => setCartOpen(false)}>Continuar comprando</button>{catalog?.store.open_now === false ? <div className={styles.storeClosedNotice}><strong>Loja fechada</strong>{catalog.store.reason_closed && <span>{catalog.store.reason_closed}</span>}<span>Não estamos aceitando pedidos no momento.</span></div> : <button className={styles.primaryButton} onClick={() => setCheckoutOpen(true)}>Continuar pedido</button>}</div>
+              : <Checkout
+                  storeSlug={storeSlug}
+                  form={form}
+                  updateForm={updateForm}
+                  submitting={submitting}
+                  onConfirm={submitOrder}
+                  onBack={() => setCheckoutOpen(false)}
+                  phoneLoading={phoneLoading}
+                  onPhoneChange={handlePhoneChange}
+                  cartItems={cartItems}
+                  subtotal={subtotal}
+                  deliveryEnabled={catalog?.store.delivery_enabled === true}
+                />}
           </>}
         </aside>
       </>}
@@ -321,12 +338,12 @@ function ProductCard({ product, index, onAdd }: { product: Product; index: numbe
   </article>;
 }
 
-function Checkout({ storeSlug, form, updateForm, submitting, onConfirm, onBack, phoneLoading, onPhoneChange, cartItems, subtotal }: {
+function Checkout({ storeSlug, form, updateForm, submitting, onConfirm, onBack, phoneLoading, onPhoneChange, cartItems, subtotal, deliveryEnabled }: {
   storeSlug: string;
   form: CheckoutForm; updateForm: <K extends keyof CheckoutForm>(key: K, value: CheckoutForm[K]) => void;
   submitting: boolean; onConfirm: (quoteId: string | null) => Promise<void>; onBack: () => void;
   phoneLoading: boolean; onPhoneChange: (value: string) => void;
-  cartItems: CartItem[]; subtotal: number;
+  cartItems: CartItem[]; subtotal: number; deliveryEnabled: boolean;
 }) {
   const encodedStoreSlug = encodeURIComponent(storeSlug);
   const [step, setStep] = useState<'form'|'review'>('form');
@@ -425,7 +442,7 @@ function Checkout({ storeSlug, form, updateForm, submitting, onConfirm, onBack, 
       </div>
       <div className={styles.reviewTotals}>
         <div><span>Subtotal</span><span>{money(subtotal)}</span></div>
-        {form.fulfillment === 'DELIVERY' && <div><span>Entrega</span><span>{deliveryFee !== null ? money(deliveryFee) : '—'}</span></div>}
+        {form.fulfillment === 'DELIVERY' && <div><span>Entrega</span><span>{deliveryFee === 0 ? 'Grátis' : deliveryFee !== null ? money(deliveryFee) : '—'}</span></div>}
         <div className={styles.reviewTotal}><strong>Total</strong><strong>{money(total)}</strong></div>
       </div>
       <div className={styles.reviewInfo}>
@@ -453,7 +470,8 @@ function Checkout({ storeSlug, form, updateForm, submitting, onConfirm, onBack, 
       </div>}
     </div>
     <button type="button" className={styles.backButton} onClick={onBack}>← Voltar para o carrinho</button><h3>Seus dados</h3>
-    <div className={styles.segmented}><button type="button" className={form.fulfillment === 'PICKUP' ? styles.segmentActive : ''} onClick={() => updateForm('fulfillment', 'PICKUP')}>Retirada</button><button type="button" className={form.fulfillment === 'DELIVERY' ? styles.segmentActive : ''} onClick={() => updateForm('fulfillment', 'DELIVERY')}>Entrega</button></div>
+    <div className={styles.segmented}><button type="button" className={form.fulfillment === 'PICKUP' ? styles.segmentActive : ''} onClick={() => updateForm('fulfillment', 'PICKUP')}>Retirada</button><button type="button" disabled={!deliveryEnabled} title={!deliveryEnabled?'Entrega em configuração. Escolha retirada.':undefined} className={form.fulfillment === 'DELIVERY' ? styles.segmentActive : ''} onClick={() => updateForm('fulfillment', 'DELIVERY')}>Entrega</button></div>
+    {!deliveryEnabled&&<p className={styles.checkoutHint}>Entrega em configuração. No momento, escolha retirada no local.</p>}
     <label>WhatsApp {phoneLoading&&<span className={styles.phoneSpinner}>…</span>}<div className={styles.phoneInput}><span className={styles.phonePrefix}>+55</span><input required placeholder="(11) 98765-4321" value={rawPhone} onChange={e=>{setRawPhone(e.target.value);onPhoneChange(normalizeBRPhone(e.target.value));}}/></div></label>
     <label>Seu nome<input required value={form.name} onChange={event => updateForm('name', event.target.value)} placeholder="Como prefere ser chamado?" /></label>
     {form.fulfillment === 'DELIVERY' && <div className={styles.addressFields}>
