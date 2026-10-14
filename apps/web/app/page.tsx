@@ -1,7 +1,7 @@
-import Storefront from './storefront';
+import DomainHome from './domain-home';
 
 export default function Home() {
   const storeSlug = process.env.NEXT_PUBLIC_DEFAULT_STORE_SLUG ?? 'samjoe-confeitaria';
-  return <Storefront storeSlug={storeSlug} />;
+  return <DomainHome defaultStoreSlug={storeSlug} />;
 }
 

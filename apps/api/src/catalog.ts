@@ -56,6 +56,14 @@ type CatalogRow = {
   is_open: boolean;
   is_open_reason: string | null;
   business_hours: Record<string, BusinessHoursDay> | null;
+  scheduled_delivery_enabled: boolean | null;
+  pickup_in_person_enabled: boolean | null;
+  pickup_by_app_enabled: boolean | null;
+  pickup_scheduling_enabled: boolean | null;
+  cash_enabled: boolean | null;
+  card_on_site_enabled: boolean | null;
+  pix_enabled: boolean | null;
+  mercado_pago_enabled: boolean | null;
 };
 
 type StoreParams = { storeSlug: string };
@@ -98,6 +106,14 @@ export function registerCatalogRoutes(app: FastifyInstance, pool: Database) {
         COALESCE(s.is_open, true) AS is_open,
         s.is_open_reason,
         s.business_hours,
+        s.scheduled_delivery_enabled,
+        s.pickup_in_person_enabled,
+        s.pickup_by_app_enabled,
+        s.pickup_scheduling_enabled,
+        s.cash_enabled,
+        s.card_on_site_enabled,
+        s.pix_enabled,
+        s.mercado_pago_enabled,
         c.id AS category_id,
         c.name AS category_name,
         c.slug AS category_slug,
@@ -174,7 +190,26 @@ export function registerCatalogRoutes(app: FastifyInstance, pool: Database) {
 
     const open_now = computeOpenNow(first.is_open, first.business_hours, first.timezone);
     return {
-      store: { name: first.store_name, slug: first.store_slug, timezone: first.timezone, storefront: first.storefront_config ?? {}, delivery_enabled: first.delivery_status === 'ACTIVE', is_open: first.is_open, open_now, reason_closed: !open_now ? (first.is_open_reason ?? null) : null },
+      store: {
+        name: first.store_name, slug: first.store_slug, timezone: first.timezone,
+        storefront: first.storefront_config ?? {},
+        delivery_enabled: first.delivery_status === 'ACTIVE',
+        is_open: first.is_open, open_now,
+        reason_closed: !open_now ? (first.is_open_reason ?? null) : null,
+        fulfillment_config: {
+          delivery_enabled: first.delivery_status === 'ACTIVE',
+          scheduled_delivery_enabled: first.scheduled_delivery_enabled ?? false,
+          pickup_in_person_enabled: first.pickup_in_person_enabled ?? true,
+          pickup_by_app_enabled: first.pickup_by_app_enabled ?? false,
+          pickup_scheduling_enabled: first.pickup_scheduling_enabled ?? false,
+        },
+        payment_config: {
+          cash_enabled: first.cash_enabled ?? true,
+          card_on_site_enabled: first.card_on_site_enabled ?? false,
+          pix_enabled: first.pix_enabled ?? true,
+          mercado_pago_enabled: first.mercado_pago_enabled ?? false,
+        },
+      },
       categories: categoryOrder.map(key => {
         const cat = categories.get(key)!;
         return { id: cat.id, name: cat.name, slug: cat.slug, products: [...cat.products.values()] };

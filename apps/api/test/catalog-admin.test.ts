@@ -220,3 +220,82 @@ test('DELETE /v1/admin/products/:id rejeita produto com pedidos', async () => {
   assert.equal(res.json().error.code, 'product_has_orders');
   await app.close();
 });
+
+test('POST /v1/admin/stores/:storeSlug/categories cria a primeira categoria', async () => {
+  let insertValues: unknown[] | undefined;
+  const base = buildPool({
+    'FROM auth_sessions': [validSession],
+    'SELECT id AS store_id FROM stores': [{ store_id: 'store-a' }],
+  });
+  const pool: TransactionalDatabase = {
+    ...base,
+    async query<T extends QueryResultRow>(sql: string, values?: unknown[]): Promise<{ rows: T[] }> {
+      if (sql.includes('INSERT INTO categories')) {
+        insertValues = values;
+        return { rows: [{ category_id: 'cat-1' } as unknown as T] };
+      }
+      return base.query<T>(sql, values);
+    },
+  };
+  const app = buildApp({ pool });
+  const res = await app.inject({
+    method: 'POST', url: '/v1/admin/stores/doce-horizonte-centro/categories',
+    headers: { authorization: 'Bearer demo-token-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' },
+    payload: { name: '  Bolos no pote  ' },
+  });
+  assert.equal(res.statusCode, 201);
+  assert.equal(res.json().category_id, 'cat-1');
+  assert.deepEqual(insertValues, ['tenant-a', 'store-a', 'Bolos no pote', 'bolos-no-pote']);
+  await app.close();
+});
+
+test('POST /v1/admin/stores/:storeSlug/categories rejeita nome repetido', async () => {
+  const pool = buildPool({
+    'FROM auth_sessions': [validSession],
+    'SELECT id AS store_id FROM stores': [{ store_id: 'store-a' }],
+    'INSERT INTO categories': [],
+  });
+  const app = buildApp({ pool });
+  const res = await app.inject({
+    method: 'POST', url: '/v1/admin/stores/doce-horizonte-centro/categories',
+    headers: { authorization: 'Bearer demo-token-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' },
+    payload: { name: 'Bolos no pote' },
+  });
+  assert.equal(res.statusCode, 409);
+  assert.equal(res.json().error.code, 'category_already_exists');
+  await app.close();
+});
+
+test('PATCH /v1/admin/categories/:id impede arquivar categoria com produtos', async () => {
+  const pool = buildPool({
+    'FROM auth_sessions': [validSession],
+    'SELECT id AS category_id, store_id FROM categories': [{ category_id: 'cat-1', store_id: 'store-a' }],
+    'SELECT COUNT(*) AS count FROM products': [{ count: '2' }],
+  });
+  const app = buildApp({ pool });
+  const res = await app.inject({
+    method: 'PATCH', url: '/v1/admin/categories/cat-1',
+    headers: { authorization: 'Bearer demo-token-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' },
+    payload: { is_active: false },
+  });
+  assert.equal(res.statusCode, 422);
+  assert.equal(res.json().error.code, 'category_has_products');
+  await app.close();
+});
+
+test('PATCH /v1/admin/categories/:id atualiza a ordem da categoria', async () => {
+  const pool = buildPool({
+    'FROM auth_sessions': [validSession],
+    'SELECT id AS category_id, store_id FROM categories': [{ category_id: 'cat-1', store_id: 'store-a' }],
+    'UPDATE categories SET': [{ category_id: 'cat-1' }],
+  });
+  const app = buildApp({ pool });
+  const res = await app.inject({
+    method: 'PATCH', url: '/v1/admin/categories/cat-1',
+    headers: { authorization: 'Bearer demo-token-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' },
+    payload: { sort_order: 3 },
+  });
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.json().category_id, 'cat-1');
+  await app.close();
+});

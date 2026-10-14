@@ -7,7 +7,7 @@ import type { Database, TransactionalDatabase } from '../src/catalog.js';
 const stores = {
   'doce-horizonte-centro': [{
     tenant_id: 'tenant-a', store_id: 'store-a', store_name: 'Centro', store_slug: 'doce-horizonte-centro',
-    timezone: 'America/Sao_Paulo',
+    timezone: 'America/Sao_Paulo', delivery_status: 'ACTIVE',
     category_id: 'cat-a', category_name: 'Bolos no pote', category_slug: 'bolos-no-pote', category_sort_order: 1,
     product_id: 'product-a', product_name: 'Bolo Aurora', description: null,
     variant_id: 'variant-a', sku: 'A-1', variant_name: '250 ml', price_cents: 1200, currency: 'BRL',
@@ -15,7 +15,7 @@ const stores = {
   }],
   'sabor-nuvem-jardins': [{
     tenant_id: 'tenant-b', store_id: 'store-b', store_name: 'Jardins', store_slug: 'sabor-nuvem-jardins',
-    timezone: 'America/Sao_Paulo',
+    timezone: 'America/Sao_Paulo', delivery_status: 'PENDING',
     category_id: 'cat-b', category_name: 'Salgados', category_slug: 'salgados', category_sort_order: 1,
     product_id: 'product-b', product_name: 'Empada Nuvem', description: null,
     variant_id: 'variant-b', sku: 'B-1', variant_name: 'Palmito', price_cents: 900, currency: 'BRL',
@@ -44,6 +44,8 @@ test('catálogos fictícios permanecem isolados por loja e tenant', async () => 
   assert.doesNotMatch(first.body, /Empada Nuvem/);
   assert.match(second.body, /Empada Nuvem/);
   assert.doesNotMatch(second.body, /Bolo Aurora/);
+  assert.equal(first.json().store.delivery_enabled, true);
+  assert.equal(second.json().store.delivery_enabled, false);
   await app.close();
 });
 
@@ -93,6 +95,25 @@ test('loja inexistente não revela catálogo', async () => {
   const response = await app.inject({ method: 'GET', url: '/v1/public/stores/inexistente/catalog' });
   assert.equal(response.statusCode, 404);
   assert.equal(response.json().error.code, 'store_not_found');
+  await app.close();
+});
+
+test('domínio verificado resolve somente a loja vinculada', async () => {
+  const domainPool: TransactionalDatabase = {
+    async query<T extends QueryResultRow>(sql: string, values?: unknown[]): Promise<{ rows: T[] }> {
+      if (sql.includes('FROM store_domains') && values?.[0] === 'doces.exemplo.com.br') {
+        return { rows: [{ store_slug: 'doce-horizonte-centro' } as unknown as T] };
+      }
+      return { rows: [] };
+    },
+    async transaction<T>(operation: (database: Database) => Promise<T>): Promise<T> { return operation(domainPool); },
+  };
+  const app = buildApp({ pool: domainPool });
+  const found = await app.inject({ method: 'GET', url: '/v1/public/domains/doces.exemplo.com.br' });
+  const missing = await app.inject({ method: 'GET', url: '/v1/public/domains/outro.exemplo.com.br' });
+  assert.equal(found.statusCode, 200);
+  assert.equal(found.json().store_slug, 'doce-horizonte-centro');
+  assert.equal(missing.statusCode, 404);
   await app.close();
 });
 

@@ -33,6 +33,10 @@ type StoreRow = {
   timezone?: string; status?: string; origin_address?: Record<string, unknown> | null;
   storefront_config?: Record<string, unknown>; delivery_status?: 'PENDING' | 'ACTIVE';
   is_open?: boolean; is_open_reason?: string | null; business_hours?: Record<string, unknown> | null;
+  scheduled_delivery_enabled?: boolean; pickup_in_person_enabled?: boolean;
+  pickup_by_app_enabled?: boolean; pickup_scheduling_enabled?: boolean;
+  cash_enabled?: boolean; card_on_site_enabled?: boolean;
+  pix_enabled?: boolean; mercado_pago_enabled?: boolean;
 };
 type DeliveryPricingRow = {
   id: string; version: string; base_fee_cents: number; included_meters: number;
@@ -67,7 +71,9 @@ export function registerCatalogAdminRoutes(app: FastifyInstance, database: Trans
   app.get<{ Params: StoreSlugParams }>('/v1/admin/stores/:storeSlug', async (request) => {
     const session = await requireOperator(request, database);
     const { rows } = await database.query<StoreRow>(`
-      SELECT id AS store_id,slug AS store_slug,name AS store_name,currency,timezone,status,origin_address,storefront_config,delivery_status,is_open,is_open_reason,business_hours
+      SELECT id AS store_id,slug AS store_slug,name AS store_name,currency,timezone,status,origin_address,storefront_config,delivery_status,is_open,is_open_reason,business_hours,
+        scheduled_delivery_enabled,pickup_in_person_enabled,pickup_by_app_enabled,pickup_scheduling_enabled,
+        cash_enabled,card_on_site_enabled,pix_enabled,mercado_pago_enabled
       FROM stores WHERE slug=$1 AND tenant_id=$2
     `, [request.params.storeSlug, session.tenant_id]);
     if (!rows[0]) throw new HttpError(404, 'store_not_found', 'Loja não encontrada.');
@@ -79,6 +85,10 @@ export function registerCatalogAdminRoutes(app: FastifyInstance, database: Trans
     origin_address?: Record<string, unknown> | null;
     storefront_config?: Record<string, unknown>;
     is_open?: boolean; is_open_reason?: string | null; business_hours?: Record<string, unknown> | null;
+    scheduled_delivery_enabled?: boolean; pickup_in_person_enabled?: boolean;
+    pickup_by_app_enabled?: boolean; pickup_scheduling_enabled?: boolean;
+    cash_enabled?: boolean; card_on_site_enabled?: boolean;
+    pix_enabled?: boolean; mercado_pago_enabled?: boolean;
   } }>('/v1/admin/stores/:storeSlug', {
     schema: { body: { type: 'object', additionalProperties: false, minProperties: 1, properties: {
       name: { type: 'string', minLength: 1, maxLength: 160 },
@@ -89,6 +99,14 @@ export function registerCatalogAdminRoutes(app: FastifyInstance, database: Trans
       is_open_reason: { type: ['string', 'null'], maxLength: 255 },
       business_hours: { anyOf: [{ type: 'object' }, { type: 'null' }] },
       origin_address: { anyOf: [{ $ref: 'address#' }, { type: 'null' }] },
+      scheduled_delivery_enabled: { type: 'boolean' },
+      pickup_in_person_enabled: { type: 'boolean' },
+      pickup_by_app_enabled: { type: 'boolean' },
+      pickup_scheduling_enabled: { type: 'boolean' },
+      cash_enabled: { type: 'boolean' },
+      card_on_site_enabled: { type: 'boolean' },
+      pix_enabled: { type: 'boolean' },
+      mercado_pago_enabled: { type: 'boolean' },
       storefront_config: { type: 'object', additionalProperties: false, properties: {
         brand_subtitle: { type: 'string', maxLength: 120 },
         hero_eyebrow: { type: 'string', maxLength: 120 },
@@ -142,10 +160,15 @@ export function registerCatalogAdminRoutes(app: FastifyInstance, database: Trans
         THEN 'ACTIVE' ELSE 'PENDING' END`);
     }
     if (request.body.storefront_config !== undefined) sets.push(`storefront_config=$${values.push(JSON.stringify(request.body.storefront_config))}::jsonb`);
+    for (const col of ['scheduled_delivery_enabled','pickup_in_person_enabled','pickup_by_app_enabled','pickup_scheduling_enabled','cash_enabled','card_on_site_enabled','pix_enabled','mercado_pago_enabled'] as const) {
+      if (request.body[col] !== undefined) sets.push(`${col}=$${values.push(request.body[col])}`);
+    }
     sets.push('updated_at=now()');
     const { rows } = await database.query<StoreRow>(`
       UPDATE stores SET ${sets.join(',')} WHERE slug=$1 AND tenant_id=$2
-      RETURNING id AS store_id,slug AS store_slug,name AS store_name,currency,timezone,status,origin_address,storefront_config,delivery_status,is_open,is_open_reason,business_hours
+      RETURNING id AS store_id,slug AS store_slug,name AS store_name,currency,timezone,status,origin_address,storefront_config,delivery_status,is_open,is_open_reason,business_hours,
+        scheduled_delivery_enabled,pickup_in_person_enabled,pickup_by_app_enabled,pickup_scheduling_enabled,
+        cash_enabled,card_on_site_enabled,pix_enabled,mercado_pago_enabled
     `, values);
     if (!rows[0]) throw new HttpError(404, 'store_not_found', 'Loja não encontrada.');
     return { store: rows[0] };

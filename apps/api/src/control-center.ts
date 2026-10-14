@@ -1,6 +1,7 @@
 import { createHash, randomBytes } from 'node:crypto';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import type { Database, TransactionalDatabase } from './catalog.js';
+import { HttpError } from './errors.js';
 
 type LoginBody = { email: string; password: string };
 type ControlSession = {
@@ -25,6 +26,28 @@ function bearerToken(request: FastifyRequest): string | null {
   if (!value?.startsWith('Bearer ')) return null;
   const token = value.slice(7).trim();
   return token.length >= 32 ? token : null;
+}
+
+function normalizeHostname(value: string): string {
+  const hostname = value.trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/$/, '');
+  if (!/^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/.test(hostname)) {
+    throw new HttpError(422, 'invalid_domain', 'Informe um domínio válido, sem protocolo ou caminho.');
+  }
+  return hostname;
+}
+
+export function domainVerificationRecord(hostname: string, token: string) {
+  return { type: 'TXT', name: `_samjoe-verification.${hostname}`, value: token } as const;
+}
+
+async function hasDnsVerification(hostname: string, token: string): Promise<boolean> {
+  const record = domainVerificationRecord(hostname, token);
+  const response = await fetch(`https://cloudflare-dns.com/dns-query?name=${encodeURIComponent(record.name)}&type=TXT`, {
+    headers: { accept: 'application/dns-json' },
+  });
+  if (!response.ok) return false;
+  const body = await response.json() as { Answer?: Array<{ data?: string }> };
+  return body.Answer?.some(answer => answer.data?.replace(/^"|"$/g, '') === token) ?? false;
 }
 
 async function resolveControlSession(request: FastifyRequest, database: Database) {
@@ -102,7 +125,8 @@ export function registerControlCenterRoutes(app: FastifyInstance, database: Tran
       id: string; slug: string; trade_name: string; legal_name: string | null; status: string;
       food_tenant_id: string | null; stores_count: string;
       active_users_count: string;
-      owner_email: string | null; primary_domain: string | null; domain_status: string | null;
+      owner_email: string | null; primary_domain: string | null; primary_domain_id: string | null; domain_status: string | null;
+      store_slug: string | null; delivery_status: string | null;
       monthly_amount_cents: string;
     }>(`
       SELECT client.id, client.slug, client.trade_name, client.legal_name, client.status,
@@ -118,9 +142,14 @@ export function registerControlCenterRoutes(app: FastifyInstance, database: Tran
         (SELECT domain.hostname FROM public.store_domains domain
           WHERE domain.tenant_id = food.external_tenant_id
           ORDER BY domain.is_primary DESC, domain.created_at LIMIT 1) AS primary_domain,
+        (SELECT domain.id::text FROM public.store_domains domain
+          WHERE domain.tenant_id = food.external_tenant_id
+          ORDER BY domain.is_primary DESC, domain.created_at LIMIT 1) AS primary_domain_id,
         (SELECT domain.status FROM public.store_domains domain
           WHERE domain.tenant_id = food.external_tenant_id
           ORDER BY domain.is_primary DESC, domain.created_at LIMIT 1) AS domain_status,
+        (SELECT store.slug FROM public.stores store WHERE store.tenant_id=food.external_tenant_id ORDER BY store.created_at LIMIT 1) AS store_slug,
+        (SELECT store.delivery_status FROM public.stores store WHERE store.tenant_id=food.external_tenant_id ORDER BY store.created_at LIMIT 1) AS delivery_status,
         COALESCE((SELECT sum(subscription.monthly_amount_cents)::text
           FROM control_plane.subscriptions subscription
           JOIN control_plane.client_systems system ON system.id = subscription.client_system_id
@@ -167,6 +196,7 @@ export function registerControlCenterRoutes(app: FastifyInstance, database: Tran
       stores_count: Number(client.stores_count),
       active_users_count: Number(client.active_users_count),
       monthly_amount_cents: Number(client.monthly_amount_cents),
+      provisional_url: client.store_slug ? `https://lojas.samjoe.com.br/${client.store_slug}` : null,
       products: Object.fromEntries(products
         .filter((product) => product.client_id === client.id)
         .map((product) => [product.code, {
@@ -203,6 +233,94 @@ export function registerControlCenterRoutes(app: FastifyInstance, database: Tran
       },
       clients: normalized,
     };
+  });
+
+  app.get<{ Params: { clientId: string } }>('/v1/control/clients/:clientId/domains', async (request, reply) => {
+    const session = await resolveControlSession(request, database);
+    if (!session) return reply.status(401).send({ error: { code: 'unauthorized', message: 'Sessão master ausente ou expirada.', request_id: request.id } });
+    const stores = await database.query<{ tenant_id: string; store_id: string; store_slug: string }>(`
+      SELECT system.external_tenant_id AS tenant_id, store.id AS store_id, store.slug AS store_slug
+      FROM control_plane.client_systems system
+      JOIN public.stores store ON store.tenant_id=system.external_tenant_id
+      WHERE system.client_id=$1 AND system.system_code='food_app' AND system.environment='PRODUCTION'
+      ORDER BY store.created_at LIMIT 1
+    `, [request.params.clientId]);
+    const store = stores.rows[0];
+    if (!store) throw new HttpError(404, 'food_store_not_found', 'Loja Food não encontrada para este cliente.');
+    const domains = await database.query<{ id: string; hostname: string; status: string; is_primary: boolean; verification_token: string | null; verified_at: string | null }>(`
+      SELECT id,hostname,status,is_primary,verification_token,verified_at::text
+      FROM public.store_domains WHERE tenant_id=$1 AND store_id=$2 ORDER BY is_primary DESC,created_at
+    `, [store.tenant_id, store.store_id]);
+    return {
+      provisional_url: `https://lojas.samjoe.com.br/${store.store_slug}`,
+      cname_target: 'lojas.samjoe.com.br',
+      domains: domains.rows.map(domain => ({
+        ...domain,
+        verification: domain.verification_token ? domainVerificationRecord(domain.hostname, domain.verification_token) : null,
+      })),
+    };
+  });
+
+  app.post<{ Params: { clientId: string }; Body: { hostname: string } }>('/v1/control/clients/:clientId/domains', {
+    schema: { body: { type: 'object', additionalProperties: false, required: ['hostname'], properties: { hostname: { type: 'string', minLength: 4, maxLength: 253 } } } },
+  }, async (request, reply) => {
+    const session = await resolveControlSession(request, database);
+    if (!session) return reply.status(401).send({ error: { code: 'unauthorized', message: 'Sessão master ausente ou expirada.', request_id: request.id } });
+    const hostname = normalizeHostname(request.body.hostname);
+    const stores = await database.query<{ tenant_id: string; store_id: string; store_slug: string }>(`
+      SELECT system.external_tenant_id AS tenant_id, store.id AS store_id, store.slug AS store_slug
+      FROM control_plane.client_systems system
+      JOIN public.stores store ON store.tenant_id=system.external_tenant_id
+      WHERE system.client_id=$1 AND system.system_code='food_app' AND system.environment='PRODUCTION'
+      ORDER BY store.created_at LIMIT 1
+    `, [request.params.clientId]);
+    const store = stores.rows[0];
+    if (!store) throw new HttpError(404, 'food_store_not_found', 'Loja Food não encontrada para este cliente.');
+    const token = randomBytes(24).toString('hex');
+    const { rows } = await database.query<{ id: string }>(`
+      INSERT INTO public.store_domains (tenant_id,store_id,hostname,status,is_primary,verification_token)
+      VALUES ($1,$2,$3,'PENDING',false,$4)
+      ON CONFLICT (lower(hostname)) DO UPDATE SET
+        verification_token=EXCLUDED.verification_token,status='PENDING',is_primary=false,verified_at=null,updated_at=now()
+      WHERE store_domains.tenant_id=EXCLUDED.tenant_id AND store_domains.store_id=EXCLUDED.store_id
+      RETURNING id
+    `, [store.tenant_id, store.store_id, hostname, token]);
+    if (!rows[0]) throw new HttpError(409, 'domain_in_use', 'Este domínio já pertence a outro cliente.');
+    return reply.status(201).send({
+      domain_id: rows[0].id,
+      hostname,
+      provisional_url: `https://lojas.samjoe.com.br/${store.store_slug}`,
+      dns: { cname: { type: 'CNAME', name: hostname, value: 'lojas.samjoe.com.br' }, verification: domainVerificationRecord(hostname, token) },
+    });
+  });
+
+  app.post<{ Params: { clientId: string; domainId: string } }>('/v1/control/clients/:clientId/domains/:domainId/verify', async (request, reply) => {
+    const session = await resolveControlSession(request, database);
+    if (!session) return reply.status(401).send({ error: { code: 'unauthorized', message: 'Sessão master ausente ou expirada.', request_id: request.id } });
+    const { rows } = await database.query<{ id: string; tenant_id: string; store_id: string; store_slug: string; hostname: string; verification_token: string | null }>(`
+      SELECT domain.id,domain.tenant_id,domain.store_id,store.slug AS store_slug,domain.hostname,domain.verification_token
+      FROM public.store_domains domain
+      JOIN public.stores store ON store.id=domain.store_id AND store.tenant_id=domain.tenant_id
+      JOIN control_plane.client_systems system ON system.external_tenant_id=domain.tenant_id
+      WHERE domain.id=$1 AND system.client_id=$2 AND system.system_code='food_app' AND system.environment='PRODUCTION'
+      LIMIT 1
+    `, [request.params.domainId, request.params.clientId]);
+    const domain = rows[0];
+    if (!domain) throw new HttpError(404, 'domain_not_found', 'Domínio não encontrado.');
+    if (!domain.verification_token || !(await hasDnsVerification(domain.hostname, domain.verification_token))) {
+      throw new HttpError(422, 'domain_not_verified', 'O registro TXT de verificação ainda não foi encontrado no DNS.');
+    }
+    await database.transaction(async tx => {
+      await tx.query(`UPDATE public.store_domains SET is_primary=false,updated_at=now() WHERE tenant_id=$1 AND store_id=$2`, [domain.tenant_id, domain.store_id]);
+      await tx.query(`UPDATE public.store_domains SET status='VERIFIED',is_primary=true,verified_at=now(),updated_at=now() WHERE id=$1 AND tenant_id=$2`, [domain.id, domain.tenant_id]);
+      await tx.query(`
+        UPDATE control_plane.client_systems SET
+          configuration=jsonb_set(COALESCE(configuration,'{}'::jsonb),'{provisional_url}',to_jsonb($3::text),true),
+          base_url=$4,updated_at=now()
+        WHERE client_id=$1 AND system_code='food_app' AND environment='PRODUCTION' AND external_tenant_id=$2
+      `, [request.params.clientId, domain.tenant_id, `https://lojas.samjoe.com.br/${domain.store_slug}`, `https://${domain.hostname}`]);
+    });
+    return { domain: { id: domain.id, hostname: domain.hostname, status: 'VERIFIED', is_primary: true }, https_check: 'pending_deploy_smoke_test' };
   });
 
   app.get<{ Params: { clientId: string } }>('/v1/control/clients/:clientId/users', async (request, reply) => {

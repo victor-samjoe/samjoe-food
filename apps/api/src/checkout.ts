@@ -11,19 +11,33 @@ type Address = {
 type QuoteBody = { address: Address };
 type OrderBody = {
   customer: { name: string; phone_e164: string; email?: string | null };
-  fulfillment: 'DELIVERY' | 'PICKUP';
+  fulfillment: 'DELIVERY' | 'DELIVERY_SCHEDULED' | 'PICKUP' | 'PICKUP_BY_APP';
   address?: Address | null;
   delivery_quote_id?: string | null;
+  scheduled_for?: string | null;
   items: Array<{ variant_id: string; quantity: number; notes?: string | null }>;
-  payment_method: 'CASH' | 'PIX' | 'MERCADO_PAGO';
+  payment_method: 'CASH' | 'CARD' | 'PIX' | 'MERCADO_PAGO';
   notes?: string | null;
 };
 type StoreParams = { storeSlug: string };
-type StoreRow = { tenant_id: string; store_id: string; currency: string };
-type RuleRow = StoreRow & {
-  rule_id: string; version: string; base_fee_cents: number; included_meters: number;
-  price_per_extra_km_cents: number; standard_radius_meters: number;
-  maximum_radius_meters: number; exception_fee_cents: number;
+type StoreRow = {
+  tenant_id: string; store_id: string; currency: string;
+  delivery_status: 'PENDING' | 'ACTIVE';
+  scheduled_delivery_enabled: boolean;
+  pickup_in_person_enabled: boolean;
+  pickup_by_app_enabled: boolean;
+  cash_enabled: boolean;
+  card_on_site_enabled: boolean;
+  pix_enabled: boolean;
+  mercado_pago_enabled: boolean;
+};
+type PricingFields = {
+  base_fee_cents: number; included_meters: number; price_per_extra_km_cents: number;
+  standard_radius_meters: number; maximum_radius_meters: number; exception_fee_cents: number;
+  free_delivery_radius_meters: number;
+};
+type RuleRow = StoreRow & PricingFields & {
+  rule_id: string; version: string;
   store_postal_code: string | null;
   store_address: Record<string, string | null> | null;
 };
@@ -39,8 +53,9 @@ export function simulatedDistanceMeters(customerPostalCode: string, storePostalC
   return postalCodeDistance(customerPostalCode, storePostalCode);
 }
 
-function deliveryFee(rule: RuleRow, distanceMeters: number): number {
+export function deliveryFee(rule: PricingFields, distanceMeters: number): number {
   if (distanceMeters > rule.maximum_radius_meters) return 0;
+  if (rule.free_delivery_radius_meters > 0 && distanceMeters <= rule.free_delivery_radius_meters) return 0;
   const variable = Math.round(Math.max(0, distanceMeters - rule.included_meters) * rule.price_per_extra_km_cents / 1_000);
   const exception = distanceMeters > rule.standard_radius_meters ? rule.exception_fee_cents : 0;
   return rule.base_fee_cents + variable + exception;
@@ -57,8 +72,10 @@ function orderResponse(order: Record<string, unknown>, orderId: string) {
 
 async function resolveStore(database: Database, slug: string): Promise<StoreRow> {
   const { rows } = await database.query<StoreRow>(`
-    SELECT tenant_id, id AS store_id, currency FROM stores
-    WHERE slug = $1 AND status = 'ACTIVE'
+    SELECT tenant_id, id AS store_id, currency, delivery_status,
+      scheduled_delivery_enabled, pickup_in_person_enabled, pickup_by_app_enabled,
+      cash_enabled, card_on_site_enabled, pix_enabled, mercado_pago_enabled
+    FROM stores WHERE slug = $1 AND status = 'ACTIVE'
   `, [slug]);
   if (!rows[0]) throw new HttpError(404, 'store_not_found', 'Loja não encontrada.');
   return rows[0];
@@ -77,11 +94,12 @@ export function registerCheckoutRoutes(app: FastifyInstance, database: Transacti
       SELECT s.tenant_id, s.id AS store_id, s.currency, r.id AS rule_id, r.version,
         r.base_fee_cents, r.included_meters, r.price_per_extra_km_cents,
         r.standard_radius_meters, r.maximum_radius_meters, r.exception_fee_cents,
+        r.free_delivery_radius_meters,
         s.origin_address->>'postal_code' AS store_postal_code,
         s.origin_address AS store_address
       FROM stores s
       JOIN delivery_pricing_rules r ON r.tenant_id = s.tenant_id AND r.store_id = s.id AND r.is_active
-      WHERE s.slug = $1 AND s.status = 'ACTIVE'
+      WHERE s.slug = $1 AND s.status = 'ACTIVE' AND s.delivery_status = 'ACTIVE'
     `, [request.params.storeSlug]);
     const rule = rows[0];
     if (!rule) throw new HttpError(404, 'store_or_delivery_rule_not_found', 'Loja ou regra de entrega não encontrada.');
@@ -95,6 +113,7 @@ export function registerCheckoutRoutes(app: FastifyInstance, database: Transacti
     const distance = route.distanceMeters;
     const status = distance <= rule.maximum_radius_meters ? 'AVAILABLE' : 'OUTSIDE_AREA';
     const fee = deliveryFee(rule, distance);
+    const freeDeliveryApplied = status === 'AVAILABLE' && rule.free_delivery_radius_meters > 0 && distance <= rule.free_delivery_radius_meters;
     const quoteId = randomUUID();
     const durationSeconds = route.duration
       ? Math.round(Number(route.duration.replace('s', '')))
@@ -107,11 +126,12 @@ export function registerCheckoutRoutes(app: FastifyInstance, database: Transacti
       ) VALUES ($1,$2,$3,$4,$5::jsonb,$6,$7,$8,$9,$10,$11,$12::jsonb,now() + interval '15 minutes')
     `, [quoteId, rule.tenant_id, rule.store_id, status, JSON.stringify(request.body.address), distance,
       durationSeconds, fee, Math.round(distance / 1_000 * 150), rule.currency, rule.version,
-      JSON.stringify({ source: route.source, distance_meters: distance })]);
+      JSON.stringify({ source: route.source, distance_meters: distance, free_delivery_applied: freeDeliveryApplied })]);
     return {
       id: quoteId, status, fee: { amount_cents: fee, currency: rule.currency },
       distance_meters: distance, duration_seconds: durationSeconds,
       route_source: route.source,
+      free_delivery_applied: freeDeliveryApplied,
       expires_at: new Date(Date.now() + 15 * 60_000).toISOString(), rule_version: rule.version,
     };
   });
@@ -122,12 +142,15 @@ export function registerCheckoutRoutes(app: FastifyInstance, database: Transacti
       customer: { type: 'object', additionalProperties: false, required: ['name', 'phone_e164'], properties: {
         name: { type: 'string', minLength: 1, maxLength: 160 }, phone_e164: { type: 'string', pattern: '^\\+[1-9][0-9]{7,14}$' }, email: { type: ['string', 'null'] },
       } },
-      fulfillment: { enum: ['DELIVERY', 'PICKUP'] }, address: { anyOf: [{ $ref: 'address#' }, { type: 'null' }] },
-      delivery_quote_id: { type: ['string', 'null'], format: 'uuid' }, items: { type: 'array', minItems: 1, maxItems: 100, items: {
+      fulfillment: { enum: ['DELIVERY', 'DELIVERY_SCHEDULED', 'PICKUP', 'PICKUP_BY_APP'] },
+      address: { anyOf: [{ $ref: 'address#' }, { type: 'null' }] },
+      delivery_quote_id: { type: ['string', 'null'], format: 'uuid' },
+      scheduled_for: { type: ['string', 'null'], format: 'date-time' },
+      items: { type: 'array', minItems: 1, maxItems: 100, items: {
         type: 'object', additionalProperties: false, required: ['variant_id', 'quantity'], properties: {
           variant_id: { type: 'string', format: 'uuid' }, quantity: { type: 'integer', minimum: 1, maximum: 100 }, notes: { type: ['string', 'null'], maxLength: 500 },
         },
-      } }, payment_method: { enum: ['CASH', 'PIX', 'MERCADO_PAGO'] }, notes: { type: ['string', 'null'], maxLength: 1000 },
+      } }, payment_method: { enum: ['CASH', 'CARD', 'PIX', 'MERCADO_PAGO'] }, notes: { type: ['string', 'null'], maxLength: 1000 },
     } } } },
     async (request, reply) => {
       const key = request.headers['idempotency-key'];
@@ -151,11 +174,43 @@ async function createOrder(database: Database, storeSlug: string, key: string, r
     return { replayed: true, body: orderResponse(existing.rows[0].response_body, existing.rows[0].resource_id) };
   }
 
-  if (body.fulfillment === 'DELIVERY' && (!body.address || !body.delivery_quote_id)) {
+  // Validate fulfillment type is enabled for this store
+  const fulfillmentAllowed = {
+    DELIVERY: store.delivery_status === 'ACTIVE',
+    DELIVERY_SCHEDULED: store.scheduled_delivery_enabled,
+    PICKUP: store.pickup_in_person_enabled,
+    PICKUP_BY_APP: store.pickup_by_app_enabled,
+  };
+  if (!fulfillmentAllowed[body.fulfillment]) {
+    throw new HttpError(422, 'fulfillment_not_available', 'Modalidade de atendimento não disponível nesta loja.');
+  }
+
+  // Validate payment method is enabled for this store
+  const paymentAllowed = {
+    CASH: store.cash_enabled,
+    CARD: store.card_on_site_enabled,
+    PIX: store.pix_enabled,
+    MERCADO_PAGO: store.mercado_pago_enabled,
+  };
+  if (!paymentAllowed[body.payment_method]) {
+    throw new HttpError(422, 'payment_method_not_available', 'Meio de pagamento não disponível nesta loja.');
+  }
+
+  const isDelivery = body.fulfillment === 'DELIVERY' || body.fulfillment === 'DELIVERY_SCHEDULED';
+  const needsAddress = isDelivery || body.fulfillment === 'PICKUP_BY_APP';
+
+  if (isDelivery && (!body.address || !body.delivery_quote_id)) {
     throw new HttpError(422, 'delivery_data_required', 'Endereço e cotação são obrigatórios para entrega.');
   }
+  if (body.fulfillment === 'DELIVERY_SCHEDULED' && !body.scheduled_for) {
+    throw new HttpError(422, 'scheduled_for_required', 'Data/hora de entrega agendada é obrigatória.');
+  }
+  if (body.fulfillment === 'PICKUP_BY_APP' && !body.address) {
+    throw new HttpError(422, 'address_required', 'Endereço de entrega é obrigatório para retirada via app.');
+  }
+
   let deliveryFeeCents = 0;
-  if (body.fulfillment === 'DELIVERY') {
+  if (isDelivery) {
     const quote = await database.query<QuoteRow>(`
       SELECT id, fee_cents, currency, status FROM delivery_quotes
       WHERE id=$1 AND tenant_id=$2 AND store_id=$3 AND expires_at > now()
@@ -190,15 +245,17 @@ async function createOrder(database: Database, storeSlug: string, key: string, r
     ON CONFLICT (tenant_id, phone_e164) DO UPDATE SET name=excluded.name, email=COALESCE(excluded.email, customers.email), updated_at=now()
     RETURNING id
   `, [customerId, store.tenant_id, body.customer.name, body.customer.phone_e164, body.customer.email ?? null]);
-  const status = body.payment_method === 'CASH' ? 'NEW' : 'PAYMENT_PENDING';
+  const status = (body.payment_method === 'CASH' || body.payment_method === 'CARD') ? 'NEW' : 'PAYMENT_PENDING';
   const publicNumber = `DEMO-${orderId.replaceAll('-', '').slice(0, 8).toUpperCase()}`;
   const total = subtotal + deliveryFeeCents;
   await database.query(`
-    INSERT INTO orders (id,tenant_id,store_id,customer_id,delivery_quote_id,public_number,tracking_token_hash,source,fulfillment,status,customer_snapshot,address_snapshot,subtotal_cents,delivery_fee_cents,total_cents,currency,notes)
-    VALUES ($1,$2,$3,$4,$5,$6,$7,'WEB',$8,$9,$10::jsonb,$11::jsonb,$12,$13,$14,$15,$16)
+    INSERT INTO orders (id,tenant_id,store_id,customer_id,delivery_quote_id,public_number,tracking_token_hash,source,fulfillment,status,customer_snapshot,address_snapshot,subtotal_cents,delivery_fee_cents,total_cents,currency,notes,scheduled_for)
+    VALUES ($1,$2,$3,$4,$5,$6,$7,'WEB',$8,$9,$10::jsonb,$11::jsonb,$12,$13,$14,$15,$16,$17)
   `, [orderId, store.tenant_id, store.store_id, customer.rows[0]!.id, body.delivery_quote_id ?? null, publicNumber,
     createHash('sha256').update(trackingToken(orderId)).digest('hex'), body.fulfillment, status, JSON.stringify(body.customer),
-    body.address ? JSON.stringify(body.address) : null, subtotal, deliveryFeeCents, total, store.currency, body.notes ?? null]);
+    needsAddress && body.address ? JSON.stringify(body.address) : null,
+    subtotal, deliveryFeeCents, total, store.currency, body.notes ?? null,
+    body.scheduled_for ?? null]);
 
   for (const variantId of variantIds) {
     const variant = variants.get(variantId)!;

@@ -156,6 +156,14 @@ type Store = {
   is_open?: boolean;
   is_open_reason?: string | null;
   business_hours?: Record<string, BusinessHoursDay> | null;
+  scheduled_delivery_enabled?: boolean;
+  pickup_in_person_enabled?: boolean;
+  pickup_by_app_enabled?: boolean;
+  pickup_scheduling_enabled?: boolean;
+  cash_enabled?: boolean;
+  card_on_site_enabled?: boolean;
+  pix_enabled?: boolean;
+  mercado_pago_enabled?: boolean;
 };
 type DeliveryPricing = {
   id: string;
@@ -176,6 +184,11 @@ type DeliveryDiagnostics = {
   google_routes_configured: boolean;
   expected_source: string;
   warnings: string[];
+};
+type MpIntegration = {
+  has_access_token: boolean;
+  public_key: string | null;
+  is_active: boolean;
 };
 type Notice = {
   id: string;
@@ -370,6 +383,18 @@ export default function AdminPage() {
   const [store, setStore] = useState<Store | null>(null);
   const [storeNameDraft, setStoreNameDraft] = useState("");
   const [address, setAddress] = useState<Address>(emptyAddress);
+  const [fulfillmentConfig, setFulfillmentConfig] = useState({
+    scheduled_delivery_enabled: false,
+    pickup_in_person_enabled: true,
+    pickup_by_app_enabled: false,
+    pickup_scheduling_enabled: false,
+  });
+  const [paymentConfig, setPaymentConfig] = useState({
+    cash_enabled: true,
+    card_on_site_enabled: false,
+    pix_enabled: true,
+    mercado_pago_enabled: false,
+  });
   const [error, setError] = useState("");
   const [noticeHistory, setNoticeHistory] = useState<Notice[]>([]);
   const [toast, setToast] = useState<Notice | null>(null);
@@ -444,6 +469,9 @@ export default function AdminPage() {
   const [isOpenReason, setIsOpenReason] = useState("");
   const [showHoursConfig, setShowHoursConfig] = useState(false);
   const [hoursForm, setHoursForm] = useState<Record<string, BusinessHoursDay>>({});
+  const [mpConfig, setMpConfig] = useState<MpIntegration>({ has_access_token: false, public_key: null, is_active: false });
+  const [mpAccessToken, setMpAccessToken] = useState("");
+  const [mpPublicKey, setMpPublicKey] = useState("");
 
   useEffect(() => {
     if (store?.store_name) document.title = `${store.store_name} — Admin`;
@@ -538,6 +566,7 @@ export default function AdminPage() {
           pricingData,
           categoryData,
           diagnosticsData,
+          mpData,
         ] = await Promise.all([
           api<{ orders: Order[] }>(
             `admin/stores/${storeSlug}/orders?limit=200`,
@@ -568,6 +597,10 @@ export default function AdminPage() {
             `admin/stores/${storeSlug}/delivery-diagnostics`,
             accessToken,
           ).catch(() => null),
+          api<{ integrations: { mercado_pago: MpIntegration } }>(
+            `admin/stores/${storeSlug}/payment-config`,
+            accessToken,
+          ).catch(() => null),
         ]);
         setOrders(orderData.orders ?? []);
         setBoard(deliveryData);
@@ -591,6 +624,23 @@ export default function AdminPage() {
           ...defaultStorefront,
           ...(storeData.store.storefront_config ?? {}),
         });
+        setFulfillmentConfig({
+          scheduled_delivery_enabled: storeData.store.scheduled_delivery_enabled ?? false,
+          pickup_in_person_enabled: storeData.store.pickup_in_person_enabled ?? true,
+          pickup_by_app_enabled: storeData.store.pickup_by_app_enabled ?? false,
+          pickup_scheduling_enabled: storeData.store.pickup_scheduling_enabled ?? false,
+        });
+        setPaymentConfig({
+          cash_enabled: storeData.store.cash_enabled ?? true,
+          card_on_site_enabled: storeData.store.card_on_site_enabled ?? false,
+          pix_enabled: storeData.store.pix_enabled ?? true,
+          mercado_pago_enabled: storeData.store.mercado_pago_enabled ?? false,
+        });
+        if (mpData?.integrations?.mercado_pago) {
+          const mp = mpData.integrations.mercado_pago;
+          setMpConfig(mp);
+          setMpPublicKey(mp.public_key ?? "");
+        }
         setSelectedDriver((current) =>
           deliveryData.drivers.some(
             (driver) => driver.id === current && driver.status === "AVAILABLE",
@@ -1000,6 +1050,37 @@ export default function AdminPage() {
     );
     setShowHoursConfig(false);
   }
+  async function loadMpConfig() {
+    if (!store) return;
+    try {
+      const data = await api<{ integrations: { mercado_pago: MpIntegration } }>(
+        `admin/stores/${store.store_slug}/payment-config`,
+        token,
+      );
+      const mp = data.integrations.mercado_pago;
+      setMpConfig(mp);
+      setMpPublicKey(mp.public_key ?? "");
+    } catch {
+      /* silently ignore if table doesn't exist yet */
+    }
+  }
+  async function saveMpConfig() {
+    if (!store) return;
+    const body: Record<string, unknown> = { is_active: mpConfig.is_active };
+    if (mpAccessToken.trim()) body["access_token"] = mpAccessToken.trim();
+    if (mpPublicKey.trim()) body["public_key"] = mpPublicKey.trim();
+    await run(
+      "mp-config",
+      () =>
+        api(`admin/stores/${store.store_slug}/payment-config/mercado-pago`, token, {
+          method: "PUT",
+          body: JSON.stringify(body),
+        }),
+      "Credenciais salvas.",
+    );
+    setMpAccessToken("");
+    await loadMpConfig();
+  }
   async function attachProductImage(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     event.target.value = "";
@@ -1096,6 +1177,8 @@ export default function AdminPage() {
               ...storefront,
               hero_image_url: storefront.hero_image_url?.trim() || null,
             },
+            ...fulfillmentConfig,
+            ...paymentConfig,
           }),
         }),
       "Configurações da loja e da vitrine salvas.",
@@ -3567,6 +3650,162 @@ export default function AdminPage() {
                   </div>
                 </Panel>
               </div>
+              <div
+                className={
+                  storeStep === 3
+                    ? styles.storeStepPanel
+                    : styles.storeStepHidden
+                }
+              >
+                <Panel
+                  title="Modalidades de atendimento"
+                  subtitle="Defina como os clientes podem receber ou retirar seus pedidos"
+                >
+                  <div className={styles.formGrid}>
+                    {(
+                      [
+                        { key: "scheduled_delivery_enabled" as const, label: "Entrega agendada", description: "Cliente escolhe data e hora para receber" },
+                        { key: "pickup_in_person_enabled" as const, label: "Retirada no local", description: "Cliente retira pessoalmente na loja" },
+                        { key: "pickup_by_app_enabled" as const, label: "Retirada via app (motoboy iFood/Rappi)", description: "Motoboy de aplicativo busca na loja" },
+                        { key: "pickup_scheduling_enabled" as const, label: "Permitir agendamento de retirada", description: "Cliente escolhe horário aproximado de retirada" },
+                      ] as const
+                    ).map(({ key, label, description }) => (
+                      <label key={key} style={{ gridColumn: "1 / -1", display: "flex", alignItems: "center", gap: "0.75rem", cursor: "pointer" }}>
+                        <input
+                          type="checkbox"
+                          checked={fulfillmentConfig[key]}
+                          onChange={(e) =>
+                            setFulfillmentConfig((current) => ({
+                              ...current,
+                              [key]: e.target.checked,
+                            }))
+                          }
+                        />
+                        <span>
+                          <strong>{label}</strong>
+                          <br />
+                          <small style={{ opacity: 0.65 }}>{description}</small>
+                        </span>
+                      </label>
+                    ))}
+                    <p style={{ gridColumn: "1 / -1", margin: 0, opacity: 0.6, fontSize: "0.85rem" }}>
+                      Entrega imediata é gerenciada automaticamente pelo endereço de saída e regra de frete.
+                    </p>
+                  </div>
+                </Panel>
+                <Panel
+                  title="Meios de pagamento"
+                  subtitle="Quais formas de pagamento aceitar no checkout"
+                >
+                  <div className={styles.formGrid}>
+                    {(
+                      [
+                        { key: "cash_enabled" as const, label: "Dinheiro", description: "Pague em dinheiro na entrega ou retirada" },
+                        { key: "card_on_site_enabled" as const, label: "Cartão (maquininha)", description: "Pagamento com cartão na entrega ou retirada" },
+                        { key: "pix_enabled" as const, label: "PIX", description: "Transferência instantânea via chave PIX" },
+                        { key: "mercado_pago_enabled" as const, label: "Mercado Pago", description: "Pagamento online via Mercado Pago" },
+                      ] as const
+                    ).map(({ key, label, description }) => (
+                      <label key={key} style={{ gridColumn: "1 / -1", display: "flex", alignItems: "center", gap: "0.75rem", cursor: "pointer" }}>
+                        <input
+                          type="checkbox"
+                          checked={paymentConfig[key]}
+                          onChange={(e) =>
+                            setPaymentConfig((current) => ({
+                              ...current,
+                              [key]: e.target.checked,
+                            }))
+                          }
+                        />
+                        <span>
+                          <strong>{label}</strong>
+                          <br />
+                          <small style={{ opacity: 0.65 }}>{description}</small>
+                        </span>
+                      </label>
+                    ))}
+                    <p style={{ gridColumn: "1 / -1", margin: 0, opacity: 0.6, fontSize: "0.85rem" }}>
+                      &quot;Pague na entrega&quot; combina Dinheiro e Cartão — o operador resolve na hora.
+                    </p>
+                  </div>
+                </Panel>
+              </div>
+              <div
+                className={
+                  storeStep === 4
+                    ? styles.storeStepPanel
+                    : styles.storeStepHidden
+                }
+              >
+                <Panel
+                  title="Mercado Pago"
+                  subtitle="Configure as credenciais de integração para pagamento online"
+                >
+                  <div className={styles.formGrid}>
+                    <label style={{ gridColumn: "1 / -1", display: "flex", alignItems: "center", gap: "0.75rem", cursor: "pointer" }}>
+                      <input
+                        type="checkbox"
+                        checked={mpConfig.is_active}
+                        onChange={(e) => setMpConfig((c) => ({ ...c, is_active: e.target.checked }))}
+                      />
+                      <span>
+                        <strong>Integração ativa</strong>
+                        <br />
+                        <small style={{ opacity: 0.65 }}>Permite processar pagamentos via Mercado Pago no checkout</small>
+                      </span>
+                    </label>
+                    <div style={{ gridColumn: "1 / -1" }}>
+                      <label style={{ display: "block", fontWeight: 700, fontSize: "0.85rem", marginBottom: 4 }}>
+                        Access Token
+                        {mpConfig.has_access_token && (
+                          <span style={{ marginLeft: 8, fontWeight: 400, color: "#2d7a2d", fontSize: "0.8rem" }}>✓ configurado</span>
+                        )}
+                      </label>
+                      <input
+                        type="password"
+                        className={styles.formInput}
+                        value={mpAccessToken}
+                        onChange={(e) => setMpAccessToken(e.target.value)}
+                        placeholder={mpConfig.has_access_token ? "••••••••  (deixe em branco para manter)" : "APP_USR-..."}
+                        autoComplete="off"
+                        style={{ width: "100%", boxSizing: "border-box" }}
+                      />
+                      <small style={{ opacity: 0.6, fontSize: "0.78rem" }}>Token de produção ou sandbox do painel do Mercado Pago.</small>
+                    </div>
+                    <div style={{ gridColumn: "1 / -1" }}>
+                      <label style={{ display: "block", fontWeight: 700, fontSize: "0.85rem", marginBottom: 4 }}>
+                        Public Key
+                      </label>
+                      <input
+                        type="text"
+                        className={styles.formInput}
+                        value={mpPublicKey}
+                        onChange={(e) => setMpPublicKey(e.target.value)}
+                        placeholder="APP_USR-..."
+                        autoComplete="off"
+                        style={{ width: "100%", boxSizing: "border-box" }}
+                      />
+                      <small style={{ opacity: 0.6, fontSize: "0.78rem" }}>Chave pública para inicializar o checkout no navegador.</small>
+                    </div>
+                    <div style={{ gridColumn: "1 / -1" }}>
+                      <button
+                        type="button"
+                        className={styles.primary}
+                        disabled={busy === "mp-config"}
+                        onClick={() => void saveMpConfig()}
+                        style={{ width: "100%" }}
+                      >
+                        {busy === "mp-config" ? "Salvando…" : "Salvar credenciais"}
+                      </button>
+                    </div>
+                    {mpConfig.has_access_token && (
+                      <p style={{ gridColumn: "1 / -1", margin: 0, opacity: 0.5, fontSize: "0.8rem" }}>
+                        Para remover a integração completamente, entre em contato com o suporte.
+                      </p>
+                    )}
+                  </div>
+                </Panel>
+              </div>
               <div className={styles.storeSteps}>
                 <button
                   type="button"
@@ -3578,7 +3817,7 @@ export default function AdminPage() {
                   ← Anterior
                 </button>
                 <nav aria-label="Etapas da configuração">
-                  {["Identidade", "Aparência", "Endereço"].map(
+                  {["Identidade", "Aparência", "Endereço", "Atendimento", "Pagamentos"].map(
                     (label, index) => (
                       <button
                         type="button"
@@ -3597,11 +3836,11 @@ export default function AdminPage() {
                   )}
                 </nav>
                 <div className={styles.storeStepActions}>
-                  {storeStep < 2 && (
+                  {storeStep < 4 && (
                     <button
                       type="button"
                       onClick={() =>
-                        setStoreStep((current) => Math.min(2, current + 1))
+                        setStoreStep((current) => Math.min(4, current + 1))
                       }
                     >
                       Próxima →
@@ -3705,14 +3944,14 @@ function OrderList({
     <div className={styles.orderList}>
       {orders.length === 0 && <Empty text="Nenhum pedido ativo." />}
       {orders.map((order) => {
-        const action = nextAction[order.status];
+        const action = actionForOrder(order);
         return (
           <article key={order.order_id}>
             <span className={styles.orderNumber}>{order.public_number}</span>
             <div>
               <strong>{order.customer_name}</strong>
               <small>
-                {order.fulfillment === "DELIVERY" ? "Entrega" : "Retirada"} ·{" "}
+                {order.fulfillment === "DELIVERY" ? "Entrega" : order.fulfillment === "DELIVERY_SCHEDULED" ? "Entrega agendada" : order.fulfillment === "PICKUP_BY_APP" ? "App" : "Retirada"} ·{" "}
                 {money(order.total_cents)}
               </small>
             </div>
@@ -4242,8 +4481,11 @@ function StorefrontPreview({
   );
 }
 function actionForOrder(order: Order) {
-  if (order.status === "READY" && order.fulfillment !== "DELIVERY")
+  const isPickup = order.fulfillment === "PICKUP" || order.fulfillment === "PICKUP_BY_APP";
+  if (order.status === "READY" && isPickup)
     return { to: "READY_FOR_PICKUP" as OrderStatus, label: "Liberar retirada" };
+  if (order.status === "READY" && !isPickup)
+    return { to: "OUT_FOR_DELIVERY" as OrderStatus, label: "Saiu p/ entrega" };
   if (order.status === "OUT_FOR_DELIVERY")
     return { to: "COMPLETED" as OrderStatus, label: "Concluir" };
   return nextAction[order.status];

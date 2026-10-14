@@ -8,6 +8,7 @@ import { registerCustomerRoutes } from './customers.js';
 import { registerOrderRoutes } from './orders.js';
 import { registerDeliveryRoutes } from './deliveries.js';
 import { registerPaymentRoutes } from './payments.js';
+import { registerPaymentConfigRoutes } from './payment-config.js';
 import { registerControlCenterRoutes } from './control-center.js';
 import { HttpError } from './errors.js';
 
@@ -77,6 +78,7 @@ export function buildApp(dependencies: AppDependencies = {}) {
     registerOrderRoutes(app, dependencies.pool);
     registerDeliveryRoutes(app, dependencies.pool);
     registerPaymentRoutes(app, dependencies.pool);
+    registerPaymentConfigRoutes(app, dependencies.pool);
     registerControlCenterRoutes(app, dependencies.pool);
   }
 

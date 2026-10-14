@@ -6,6 +6,11 @@ export default defineConfig({
     entrypoint: "vinext/server/fetch-handler",
     compatibilityDate: "2026-10-11",
     compatibilityFlags: ["nodejs_compat"],
+    workersDev: true,
+    domains: [
+      "app.confeitaria.samjoe.com.br",
+      "lojas.samjoe.com.br",
+    ],
     assets: { notFoundHandling: "none" },
     env: {
       ASSETS: bindings.assets(),

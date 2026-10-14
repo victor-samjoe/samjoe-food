@@ -3,6 +3,7 @@ import test from 'node:test';
 import type { QueryResultRow } from 'pg';
 import { buildApp } from '../src/app.js';
 import type { Database, TransactionalDatabase } from '../src/catalog.js';
+import { domainVerificationRecord } from '../src/control-center.js';
 
 function poolWith(rowsBySql: Record<string, unknown[]>): TransactionalDatabase {
   const pool: TransactionalDatabase = {
@@ -141,5 +142,27 @@ test('PATCH usuário permite alterar perfil e situação do acesso', async () =>
   assert.equal(response.statusCode, 200);
   assert.equal(response.json().user.role, 'VIEWER');
   assert.equal(response.json().user.membership_status, 'DISABLED');
+  await app.close();
+});
+
+test('gera registro TXT isolado para verificação de domínio', () => {
+  assert.deepEqual(domainVerificationRecord('loja.exemplo.com.br', 'token-123'), {
+    type: 'TXT', name: '_samjoe-verification.loja.exemplo.com.br', value: 'token-123',
+  });
+});
+
+test('GET domínios retorna link provisório e instruções do cliente', async () => {
+  const app = buildApp({ pool: poolWith({
+    'FROM control_plane.admin_sessions': [controlSession],
+    'SELECT system.external_tenant_id AS tenant_id': [{ tenant_id: 'tenant-1', store_id: 'store-1', store_slug: 'cafe-exemplo' }],
+    'FROM public.store_domains': [{ id: 'domain-1', hostname: 'loja.exemplo.com.br', status: 'PENDING', is_primary: false, verification_token: 'token-123', verified_at: null }],
+  }) });
+  const response = await app.inject({
+    method: 'GET', url: '/v1/control/clients/client-1/domains',
+    headers: { authorization: 'Bearer token-master-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' },
+  });
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.json().provisional_url, 'https://lojas.samjoe.com.br/cafe-exemplo');
+  assert.equal(response.json().domains[0].verification.name, '_samjoe-verification.loja.exemplo.com.br');
   await app.close();
 });

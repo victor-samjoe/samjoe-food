@@ -25,7 +25,10 @@ type Client = {
   stores_count: number;
   owner_email: string | null;
   primary_domain: string | null;
+  primary_domain_id: string | null;
   domain_status: string | null;
+  provisional_url: string | null;
+  delivery_status: string | null;
   monthly_amount_cents: number;
   products: Record<string, Product>;
   integrations: Record<string, Integration>;
@@ -45,6 +48,7 @@ type Overview = {
   };
   clients: Client[];
 };
+type DomainList = { provisional_url:string; cname_target:string; domains:Array<{id:string;hostname:string;status:string;is_primary:boolean;verification:{type:string;name:string;value:string}|null}> };
 
 async function controlApi<T>(path: string, token: string, options?: RequestInit): Promise<T> {
   const response = await fetch(`/api/backend/control/${path}`, {
@@ -150,6 +154,29 @@ export default function MasterPage() {
     setOverview(null);
   }
 
+  async function connectDomain(client: Client) {
+    const hostname=window.prompt('Domínio do cliente (sem https://):',client.primary_domain??'')?.trim();
+    if(!hostname)return;
+    setBusy(true);setError('');
+    try{
+      const result=await controlApi<{dns:{cname:{name:string;value:string};verification:{name:string;value:string}}}>(`clients/${client.id}/domains`,token,{method:'POST',body:JSON.stringify({hostname})});
+      window.alert(`Configure no DNS:\nCNAME ${result.dns.cname.name} → ${result.dns.cname.value}\nTXT ${result.dns.verification.name} = ${result.dns.verification.value}\n\nDepois clique em “Verificar DNS”.`);
+      await load(token);
+    }catch(cause){setError(cause instanceof Error?cause.message:'Falha ao cadastrar domínio.');}finally{setBusy(false);}
+  }
+
+  async function verifyDomain(client: Client) {
+    setBusy(true);setError('');
+    try{
+      const list=await controlApi<DomainList>(`clients/${client.id}/domains`,token);
+      const domain=list.domains.find(item=>item.id===client.primary_domain_id)??list.domains.find(item=>item.status==='PENDING');
+      if(!domain)throw new Error('Nenhum domínio pendente foi encontrado.');
+      await controlApi(`clients/${client.id}/domains/${domain.id}/verify`,token,{method:'POST'});
+      await load(token);
+      window.alert('Domínio verificado e promovido a principal. O link provisório foi preservado como fallback.');
+    }catch(cause){setError(cause instanceof Error?cause.message:'Falha ao verificar domínio.');}finally{setBusy(false);}
+  }
+
   if (!token || !overview) {
     return <main className={styles.loginShell}>
       <section className={styles.loginBrand}>
@@ -208,13 +235,15 @@ export default function MasterPage() {
             <div className={styles.clientTitle}><div className={styles.clientAvatar}>{client.trade_name.slice(0, 2).toUpperCase()}</div><div><h3>{client.trade_name}</h3><p>{client.owner_email ?? 'Responsável ainda não ativado'}</p></div><StatusPill status={client.status} /></div>
             <div className={styles.clientFacts}><span><small>Identificador</small>{client.slug}</span><span><small>Lojas</small>{client.stores_count}</span><span><small>Mensalidade</small>{money(client.monthly_amount_cents)}</span></div>
             <div id="produtos" className={styles.products}>
-              <div><span className={styles.productIcon}>F</span><div><strong>SamJoE Food</strong><small>{client.food_url ? 'Loja publicada' : 'Provisionamento pendente'}</small></div><StatusPill status={client.food_status} /></div>
+              <div><span className={styles.productIcon}>F</span><div><strong>SamJoE Food</strong><small>{client.delivery_status === 'ACTIVE' ? 'Entrega configurada' : 'Entrega pendente · retirada disponível'}</small></div><StatusPill status={client.food_status} /></div>
               <div><span className={`${styles.productIcon} ${styles.salesIcon}`}>S</span><div><strong>Sales Engine</strong><small>{client.sales_status === 'ACTIVE' ? 'Integração ativa' : 'Pronto para contratação'}</small></div><StatusPill status={client.sales_status} /></div>
             </div>
-            <div className={styles.domain}><span>Domínio</span><strong>{client.primary_domain ?? 'Link técnico SamJoE'}</strong><StatusPill status={client.domain_status ?? 'TÉCNICO'} /></div>
+            <div className={styles.domain}><span>Domínio</span><strong>{client.primary_domain ?? client.provisional_url ?? 'Link provisório pendente'}</strong><StatusPill status={client.domain_status ?? 'PROVISÓRIO'} /></div>
             <div className={styles.actions}>
-              {client.food_url && <a href={client.food_url} target="_blank" rel="noreferrer">Abrir loja</a>}
+              {(client.products.food_app?.url??client.provisional_url) && <a href={client.products.food_app?.url??client.provisional_url??'#'} target="_blank" rel="noreferrer">Abrir loja</a>}
               <a href="/admin" target="_blank">Admin da loja</a>
+              <button disabled={busy} onClick={()=>void connectDomain(client)}>{client.primary_domain?'Trocar domínio':'Conectar domínio'}</button>
+              {client.domain_status==='PENDING'&&<button disabled={busy} onClick={()=>void verifyDomain(client)}>Verificar DNS</button>}
               <button disabled={client.sales_status !== 'ACTIVE'} title="Será liberado após a publicação do Sales Engine correto">{client.sales_status === 'ACTIVE' ? 'Abrir Sales Engine' : 'Ativar Sales Engine'}</button>
             </div>
           </article>)}

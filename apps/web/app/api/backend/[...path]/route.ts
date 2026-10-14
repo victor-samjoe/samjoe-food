@@ -4,7 +4,7 @@ type Context = { params: Promise<{ path: string[] }> };
 async function forward(request: Request, context: Context) {
   const { path } = await context.params;
   const joined = path.join('/');
-  if (joined !== 'auth/login' && !joined.startsWith('admin/') && !joined.startsWith('control/')) {
+  if (joined !== 'auth/login' && !joined.startsWith('admin/') && !joined.startsWith('control/') && !joined.startsWith('public/domains/')) {
     return Response.json({ error: { code: 'not_found', message: 'Recurso não encontrado.' } }, { status: 404 });
   }
   return forwardFoodApi(request, `/v1/${joined}`);
@@ -13,3 +13,5 @@ async function forward(request: Request, context: Context) {
 export async function GET(request: Request, context: Context) { return forward(request, context); }
 export async function POST(request: Request, context: Context) { return forward(request, context); }
 export async function PATCH(request: Request, context: Context) { return forward(request, context); }
+export async function PUT(request: Request, context: Context) { return forward(request, context); }
+export async function DELETE(request: Request, context: Context) { return forward(request, context); }

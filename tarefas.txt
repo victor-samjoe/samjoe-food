@@ -1,0 +1,260 @@
+Loja
+
+1. Imagens dos itens precisam aparecer no carrinho da loja também; - CONCLUIDO
+2. Vamos criar o carrinho na tela, com um tooltip centralizado arredondado, não no canto; - CONCLUIDO
+3. Ao inserir o telefone, o cadastro é preenchido por completo se existir, Nome e endereço; - CONCLUIDO
+4. Como o usuário vai acessar pelo celular, geralmente whatsapp, se houver uma forma de já puxar o numero do usuário e já deixar os dados pré-carregados enquanto ele olha os itens, melhoramos a experiencia e falicita o processo, se ele quiser mudar ele só altera o telefone e ta tudo certo; - CONCLUIDO
+5. Ao atualizar a tela, ele passa rapidamente pelo modelo padrão de teste com nomes e imagens diferentes.. não pode, tem que ser 100% tela da loja ou tela branca; - CONCLUIDO
+6. Na loja, o tooltip de carrinho ficou com alguns problemas, podemos deixar ele mais largo e com barra de rolagem para evitar problemas na visualização. Quando avançamos nos dados da entrega, ele deixa um pequeno bloco em cima com setas para vermos o pedido, mas ele fica muito pequeno e não aparece; - CONCLUÍDO / VALIDADO PÓS-DEPLOY
+7. Vamos remover as informações de ambiente demonstrativo e etc; - IMPLEMENTADO / AGUARDANDO VALIDAÇÃO VISUAL
+8. No appa visão não esta muito boa.. precisamos deixar os produtos em formato de lista, e o carrossel ficou ruim também.. Vamos reduzir a parte superior para visualização no celular; - CONCLUÍDO / VALIDADO EM 360, 390 E 430 PX
+9. A parte de Cardapio digital tem um texto escrito escolhe o seu momento doce, remova; - IMPLEMENTADO / AGUARDANDO VALIDAÇÃO VISUAL
+10. a cor do local onde fica o logo precisa de um editor de cor também; - IMPLEMENTADO / AGUARDANDO VALIDAÇÃO VISUAL
+11. Aumenta o tamanho do logo na pagina da loja; - CONCLUÍDO / VALIDADO PÓS-DEPLOY
+12. Na usabilidade do app, quando acessamos a parte de preenchimento de endereço de entrega, o site automaticamente da zoom na pagina, não pode, deixe no tamanho que preenche a tela; - IMPLEMENTADO / AGUARDANDO VALIDAÇÃO MOBILE
+13. Adicionar opção para alteração das cores de cada texto que pode ser inserido; - IMPLEMENTADO / AGUARDANDO VALIDAÇÃO VISUAL
+14. Travar os cards de pedidos na mesma padronização de tamanho, independente de texto maior ou menor. No caso temos dois produtos com textos diferentes, e o botão de Adicionar acaba ficando em posições diferentes; - CONCLUÍDO / VALIDADO PÓS-DEPLOY
+15. Em baixo ta escrito "SamJoE · tecnologia SamJoE Food" tire; - IMPLEMENTADO / AGUARDANDO VALIDAÇÃO VISUAL
+16. Quando clicamos sobre o adicionar, ele abre o checkout, mas não tem opção para continuar comprando, coloque em cima do botão de continuar pedido, no mesmo formato em cor diferente; - CONCLUÍDO / VALIDADO PÓS-DEPLOY
+17. Adicione chamada para a API de localizar endereço no checkout, o usuário digita o cep e pode buscar automaticamente o endereço, deixando apenas o numero e complemento pendente para preenchimento obrigatório; - CONCLUÍDO / API DE CEP VALIDADA EM PRODUÇÃO
+18. Ao preencher telefone, se já houver o usuário cadastrado, trazer o endereço tambem junto com o nome; - CONCLUÍDO (JÁ IMPLEMENTADO E AUDITADO)
+19. Não permitir entrega com endereço errado ou incompleto; - IMPLEMENTADO / AGUARDANDO VALIDAÇÃO MOBILE
+20. Revisar o simulador de como ficara na pagina de edição da loja, deve ser exato conforme as configs; - IMPLEMENTADO / AGUARDANDO VALIDAÇÃO VISUAL
+21. Descer a PRÉVIA DA VITRINE junto com a rolagem, para quando formos configurando, tenhamos a visão de como ficará, hoje ele fica em cima trabado, então altero la embaixo o zoom por exemplo e tenho que subir a rolagem pra ver; - IMPLEMENTADO / AGUARDANDO VALIDAÇÃO VISUAL
+22. Validar frete não está calculando corretamente, quando aperto o botão, nada acontece; - CONCLUÍDO / GOOGLE ROUTES V2 VALIDADO EM PRODUÇÃO
+
+
+
+Painel Admin
+
+1. Não ficou bom separar as telas de entrega do kanban, o ideal é já deixar tudo na mesma tela para facilitar o processo da operação sem precisar ficar mudando de tela, podemos manter a aba mas precisamos de uma função simples e rápida no kanban que também faça as atribuições e disparos dos motoboys; - CONCLUIDO
+2. Em pedidos, criar filtro de data, pra podermos manter hoje, no kanban, mas podendo voltar se quiser; - CONCLUIDO
+3. Em Produtos, deixe em lista com filtro, cards menores para visualização mais clean, por linha; - CONCLUIDO
+4. Adicionar funções de cadastrar produtos novos; - CONCLUIDO
+5. Adicionar função de arquivar produtos, não podemos excluir porque se houver venda, o registro precisa continuar la para analises; - CONCLUIDO
+6. Mantenha as funções de pausar e ativar, crie também um filtro para habilitar visualização de arquivados; - CONCLUIDO
+7. Na imagem de fundo onde ficam o carrossel, temos que poder alterar essa imagem também, por cor fixa ou cor do fundo ou imagem específica; - CONCLUIDO
+8. Adicionar opção de anexar imagem do pc no Fundo do bloco de destaque; - IMPLEMENTADO / AGUARDANDO VALIDAÇÃO VISUAL
+9. Função de dar zoom ou reposicionar as imagens anexadas, assim podemos personalizar como a imagem será exibida; - IMPLEMENTADO / AGUARDANDO VALIDAÇÃO VISUAL
+10. Na parte de produtos, adicione categoria, assim podemos segmentar os produtos cadastrados por tipo; - IMPLEMENTADO / AGUARDANDO VALIDAÇÃO VISUAL
+11. Regra nova para isentar fretes de clientes até quilometragem definida, config da loja; - CONCLUÍDO / VALIDADO POR TESTES
+12. Confirme se estamos usando a API para calculo de frete no app; - CONCLUÍDO / GOOGLE ROUTES V2 VALIDADO EM PRODUÇÃO
+
+
+Link
+
+1. Vamos remover meu nome do link, podemos deixar "samjoe-food-web.dev/<nome-da-loja>" antes de usar dominio? - CONCLUÍDO COM https://lojas.samjoe.com.br/<nome-da-loja>
+
+
+======================================================================
+PLANO DE DESENVOLVIMENTO — 13/10/2026
+======================================================================
+
+Objetivo: concluir a experiência mobile da loja, ampliar a personalização
+no painel administrativo, completar categorias e regras de frete e preparar
+um endereço provisório profissional para qualquer tenant.
+
+Legenda:
+- P0: bloqueia venda, onboarding ou uso normal.
+- P1: melhoria importante da experiência e da operação.
+- P2: melhoria de personalização ou infraestrutura que pode entrar depois.
+- PENDENTE: ainda não iniciado.
+
+
+FASE 1 — ESTABILIDADE E EXPERIÊNCIA MOBILE DA LOJA
+
+[P0][CONCLUÍDO / VALIDADO PÓS-DEPLOY] LOJA-06 — Corrigir o carrinho e o resumo recolhido
+- Aumentar a largura do carrinho sem ultrapassar a tela do celular.
+- Limitar a altura pela área visível e adicionar rolagem somente no conteúdo.
+- Manter cabeçalho, total e botão principal sempre acessíveis.
+- Aumentar o resumo recolhido exibido nas etapas de cliente/endereço.
+- Garantir que as setas e o retorno ao pedido tenham área de toque adequada.
+Aceite: funciona em 360 px de largura, não corta itens e o resumo do pedido
+continua visível em todas as etapas do checkout.
+
+[P1][IMPLEMENTADO / AGUARDANDO VALIDAÇÃO VISUAL] LOJA-07 — Remover referências a demonstração
+- Remover textos como ambiente demonstrativo, simulação, dados fictícios e
+  mensagens equivalentes da experiência pública da loja.
+- Manter informações técnicas somente em logs ou telas internas.
+Aceite: o cliente final não encontra nenhuma referência a ambiente de teste.
+
+[P0][CONCLUÍDO / VALIDADO EM 360, 390 E 430 PX] LOJA-08 — Reorganizar a loja para uso no celular
+- Exibir produtos em lista compacta no celular, com foto, nome, descrição,
+  preço e botão de adicionar na mesma linha/bloco.
+- Reduzir a altura do cabeçalho e do destaque principal no mobile.
+- Reduzir o carrossel e aplicar navegação por gesto com encaixe por imagem.
+- Preservar o layout de desktop sem regressão.
+Aceite: ao abrir a loja em 360–430 px, produtos aparecem antes da primeira
+rolagem longa e o destaque não ocupa a maior parte da tela.
+
+[P1][IMPLEMENTADO / AGUARDANDO VALIDAÇÃO VISUAL] LOJA-09 — Remover texto do cardápio digital
+- Remover “escolha o seu momento doce” da área do cardápio.
+Aceite: o texto não aparece em mobile nem desktop.
+
+[P1][IMPLEMENTADO / AGUARDANDO VALIDAÇÃO VISUAL] LOJA-10 — Cor configurável do bloco do logo
+- Criar a propriedade de cor de fundo da área da marca por loja.
+- Adicionar seletor de cor e prévia no painel administrativo.
+- Aplicar a cor na loja sem afetar as demais cores do tema.
+Aceite: cada tenant salva sua cor e a alteração aparece apenas em sua loja.
+
+[P1][CONCLUÍDO / VALIDADO PÓS-DEPLOY] LOJA-11 — Aumentar o logo da loja
+- Aumentar o logo no cabeçalho e na abertura da loja.
+- Usar limites responsivos para não deformar nem cortar logos horizontais.
+Aceite: logo legível em celular e desktop, preservando a proporção original.
+
+[P0][IMPLEMENTADO / AGUARDANDO VALIDAÇÃO MOBILE] LOJA-12 — Impedir zoom automático no formulário mobile
+- Garantir tamanho mínimo de 16 px nos campos do checkout em iPhone/Safari.
+- Ajustar foco e rolagem ao abrir teclado sem alterar a escala da página.
+- Não bloquear o zoom manual de acessibilidade do usuário.
+Aceite: focar telefone, CEP, número e demais campos não amplia a página
+automaticamente; o campo focado permanece visível acima do teclado.
+
+
+FASE 2 — PERSONALIZAÇÃO DE IMAGENS NO PAINEL ADMINISTRATIVO
+
+[P1][IMPLEMENTADO / AGUARDANDO VALIDAÇÃO VISUAL] ADMIN-08 — Anexar imagem do computador no fundo do destaque
+- Reutilizar o fluxo de upload e redução de imagem já usado no logo e produto.
+- Permitir PNG, JPG e WebP para o fundo do bloco de destaque.
+- Exibir prévia, opção de trocar e opção de remover.
+- Validar tamanho final para não exceder os limites do Worker/banco.
+Aceite: a imagem pode ser escolhida no computador, salva e exibida na loja.
+
+[P1][IMPLEMENTADO / AGUARDANDO VALIDAÇÃO VISUAL] ADMIN-09 — Zoom e reposicionamento das imagens
+- Adicionar escala e ponto focal horizontal/vertical para imagem principal e
+  fundo do destaque.
+- Criar controles simples com prévia em tempo real no painel.
+- Salvar os parâmetros por tenant e aplicá-los em mobile e desktop.
+- Definir comportamento seguro para imagens antigas sem esses parâmetros.
+Aceite: o administrador consegue enquadrar a imagem sem editar o arquivo fora
+do sistema, e a prévia corresponde à loja publicada.
+
+
+FASE 3 — CATEGORIAS DE PRODUTOS
+
+[P1][IMPLEMENTADO / AGUARDANDO VALIDAÇÃO VISUAL] ADMIN-10A — Completar listagem e criação de categorias
+- Consumir no painel os endpoints de categorias que já existem no backend.
+- Permitir criar categoria sem depender de já existir produto nela.
+- Exibir validação para nomes repetidos dentro da mesma loja.
+Aceite: uma loja vazia consegue criar sua primeira categoria pelo painel.
+
+[P1][IMPLEMENTADO / AGUARDANDO VALIDAÇÃO FUNCIONAL] ADMIN-10B — Editar produto com categoria
+- Incluir categoria na edição de produto, não apenas no cadastro.
+- Permitir mover produto de categoria e também deixá-lo sem categoria.
+- Atualizar lista e vitrine imediatamente após salvar.
+Aceite: produto existente muda de categoria sem recriação e sem perder vendas.
+
+[P2][IMPLEMENTADO / AGUARDANDO VALIDAÇÃO VISUAL] ADMIN-10C — Gestão da ordem das categorias
+- Permitir ordenar categorias para controlar a sequência na vitrine.
+- Não excluir categoria que tenha histórico; usar desativação/arquivamento ou
+  exigir realocação dos produtos antes da desativação.
+Aceite: ordem definida no admin é respeitada na loja e dados históricos ficam
+preservados.
+
+
+FASE 4 — FRETE E ONBOARDING DA LOJA
+
+[P0][CONCLUÍDO / VALIDADO POR TESTES] FRETE-11A — Isenção de frete por quilometragem
+- Criar um campo específico “frete grátis até X km”.
+- Não reutilizar “distância incluída”, pois ela hoje significa distância
+  coberta pela taxa base e possui regra comercial diferente.
+- Aplicar valor zero quando a distância calculada estiver dentro da faixa.
+- Manter taxa base, km adicional, exceção e raio máximo fora da faixa grátis.
+Aceite: testes cobrem abaixo, exatamente no limite e acima da faixa gratuita.
+
+[P0][IMPLEMENTADO / DEPLOYADO] FRETE-11B — Configurar isenção no painel
+- Adicionar o campo em Entregas > Configurar frete.
+- Mostrar a fórmula completa e o resultado no simulador.
+- Exibir claramente quando a cotação recebeu “frete grátis”.
+Aceite: o administrador altera a quilometragem sem acesso ao banco e consegue
+validar um endereço antes de publicar a regra.
+
+[P0][CONCLUÍDO / GOOGLE ROUTES V2 EM PRODUÇÃO] FRETE-12A — Confirmar a fonte do cálculo em produção
+- Situação atual confirmada no código: usa Google Routes API v2 quando existe
+  GOOGLE_MAPS_API_KEY e endereço de origem completo da loja.
+- Quando um desses dados falta ou a API falha, usa estimativa por prefixo de CEP.
+- Verificar secret do Worker, endereço/CEP da loja e uma cotação real.
+- Registrar no diagnóstico da cotação a fonte: google-routes-v2,
+  postal-prefix-v2 ou postal-prefix-fallback.
+Aceite: uma cotação de teste identifica sua fonte e a produção usa Google
+Routes quando todos os requisitos estão configurados.
+
+[P0][CONCLUÍDO / DEPLOYADO E VALIDADO] FRETE-12B — Tornar o fallback visível para o administrador
+- Exibir no simulador se o valor veio do Google ou de estimativa por CEP.
+- Alertar o administrador quando a loja não tiver endereço de origem completo.
+- Não expor chave da API nem detalhes técnicos ao consumidor final.
+Aceite: o administrador sabe se o valor é real ou estimado antes de vender.
+
+[P0][CONCLUÍDO / DEPLOYADO E VALIDADO] ONBOARD-01 — Exigir configuração inicial de entrega
+- No provisionamento, criar a loja sem inventar valores comerciais.
+- Marcar frete como pendente até endereço de origem e regra serem preenchidos.
+- Impedir habilitar entrega pública enquanto a configuração estiver incompleta;
+  retirada continua disponível se estiver habilitada.
+- Incluir o estado no Control Center/infraestrutura do cliente.
+Aceite: novo tenant não publica entrega com preço inexistente ou arbitrário.
+
+
+FASE 5 — LINK PROVISÓRIO E DOMÍNIOS
+
+[P1][CONCLUÍDO / DNS E HTTPS ATIVOS] LINK-01 — Criar endereço provisório sem nome pessoal
+- Não usar samjoe-food-web.dev sem antes possuir e configurar esse domínio.
+- Opção recomendada com o domínio atual:
+  https://lojas.samjoe.com.br/<nome-da-loja>
+- Manter uma única implantação multi-tenant; não criar Worker por cliente.
+- Resolver o tenant pelo caminho e gerar o link automaticamente no onboarding.
+Aceite: nova loja recebe um link profissional imediatamente, sem o identificador
+victor-conceicao, antes de conectar seu domínio próprio.
+
+[P1][CONCLUÍDO / FLUXO DEPLOYADO] LINK-02 — Conectar domínio próprio do cliente
+- Criar roteiro no Control Center com domínio solicitado, instruções de DNS,
+  verificação, SSL e promoção a domínio principal.
+- Preservar o link provisório como fallback técnico.
+Aceite: domínio somente vira principal após verificação e HTTPS funcional.
+
+
+FASE 6 — TESTES E PUBLICAÇÃO
+
+[P0][CONCLUÍDO / CHROME AUTOMATIZADO] QA-01 — Testes mobile e checkout
+- Validar iPhone/Safari e Android/Chrome em 360, 390 e 430 px.
+- Cobrir carrinho longo, mudança de etapa, teclado, entrega, retirada e retorno.
+- Chrome validado em 360, 390 e 430 px no domínio de produção, sem estouro horizontal.
+- Fluxo produto, carrinho, checkout e revisão aprovado nos três viewports sem criar pedido.
+- Safari em dispositivo real permanece como conferência manual complementar.
+
+[P0][CONCLUÍDO / TESTES AUTOMATIZADOS] QA-02 — Testes multi-tenant
+- Confirmar isolamento de cores, imagens, categorias, frete e links entre lojas.
+- Garantir que alterações da SamJoE Confeitaria não afetem outro tenant.
+
+[P0][CONCLUÍDO] QA-03 — Publicação controlada
+- Typecheck, testes, build, deploy, smoke test e validação autenticada.
+- Publicar primeiro na SamJoE Confeitaria e registrar versão/commit.
+- Typecheck, 56 testes de workspace, 4 testes de provisionamento e build aprovados.
+- Migrations 0025 e 0026 aplicadas no Supabase de produção.
+- Worker samjoe-food-web publicado na versão f1d9939d-5b20-4ed6-ab73-87bd19187f3d.
+- HTTPS, catálogo, admin, master, link limpo e Google Routes v2 aprovados no smoke test.
+
+
+ORDEM DE EXECUÇÃO RECOMENDADA
+
+1. LOJA-06, LOJA-08 e LOJA-12.
+2. LOJA-07, LOJA-09 e LOJA-11.
+3. ADMIN-08, ADMIN-09 e LOJA-10.
+4. ADMIN-10A, ADMIN-10B e ADMIN-10C.
+5. FRETE-12A, FRETE-11A, FRETE-11B, FRETE-12B e ONBOARD-01.
+6. LINK-01 e LINK-02.
+7. QA-01, QA-02 e QA-03 ao final de cada lote relevante.
+
+
+DIVISÃO SEGURA CASO O CLAUDINHO ENTRE NA EXECUÇÃO
+
+- Frente A — Loja/mobile: storefront.tsx e storefront.module.css
+  (LOJA-06 a LOJA-12).
+- Frente B — Admin/mídia/categorias: admin/page.tsx, admin.module.css e rotas
+  administrativas (ADMIN-08 a ADMIN-10C).
+- Frente C — Frete/onboarding: checkout, routing, migration e provisionamento
+  (FRETE-11, FRETE-12 e ONBOARD-01).
+- Frente D — Infra/link: domínio, resolução de tenant e Control Center
+  (LINK-01 e LINK-02).
+
+Regra de coordenação: cada frente deve informar arquivos/migrations alterados e
+registrar decisões no documento de interoperabilidade antes de mudar contratos
+compartilhados. Evitar duas pessoas editando o mesmo arquivo ao mesmo tempo.

@@ -7,6 +7,7 @@ import {
   normalizeDomain,
   slugify,
 } from './tenant-provisioning.js';
+import { publicResult } from './provision-tenant.js';
 
 test('normaliza nome em slug estável', () => {
   assert.equal(slugify('Café da Ana & Filhos'), 'cafe-da-ana-filhos');
@@ -34,4 +35,5 @@ test('monta cadastro mínimo e mantém data de nascimento opcional', () => {
   assert.equal(input.storeSlug, 'cafe-exemplo');
   assert.equal(input.documentType, 'CNPJ');
   assert.equal(input.birthDate, null);
+  assert.equal(publicResult(input).urls.storefront, 'https://lojas.samjoe.com.br/cafe-exemplo');
 });

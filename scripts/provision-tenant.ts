@@ -46,8 +46,8 @@ export function publicResult(input: ProvisioningInput) {
       birth_date_collected: input.birthDate !== null,
     },
     urls: {
-      storefront: `https://samjoe-food-web.victor-conceicao.workers.dev/loja/${input.storeSlug}`,
-      admin: 'https://samjoe-food-web.victor-conceicao.workers.dev/admin',
+      storefront: `https://lojas.samjoe.com.br/${input.storeSlug}`,
+      admin: 'https://lojas.samjoe.com.br/admin',
       custom_domain: input.domain ? `https://${input.domain}` : null,
     },
   };
@@ -118,8 +118,8 @@ export async function provisionTenantInTransaction(client: pg.PoolClient, input:
     `, [tenant.id, user.id]);
 
     const storeResult = await client.query<StoreRow>(`
-      INSERT INTO stores (tenant_id, name, slug, timezone, currency, status)
-      VALUES ($1, $2, $3, 'America/Sao_Paulo', 'BRL', 'ACTIVE')
+      INSERT INTO stores (tenant_id, name, slug, timezone, currency, status, delivery_status)
+      VALUES ($1, $2, $3, 'America/Sao_Paulo', 'BRL', 'ACTIVE', 'PENDING')
       ON CONFLICT (slug) DO UPDATE
       SET name = EXCLUDED.name, status = 'ACTIVE', updated_at = now()
       WHERE stores.tenant_id = EXCLUDED.tenant_id
@@ -161,6 +161,25 @@ export async function provisionTenantInTransaction(client: pg.PoolClient, input:
           verified_at = null, updated_at = now()
       `, [tenant.id, store.id, input.domain]);
     }
+
+    const controlClient = await client.query<{ id: string }>(`
+      INSERT INTO control_plane.clients (slug,trade_name,legal_name,status,timezone)
+      VALUES ($1,$2,$3,'ACTIVE','America/Sao_Paulo')
+      ON CONFLICT (slug) DO UPDATE SET trade_name=EXCLUDED.trade_name,legal_name=EXCLUDED.legal_name,updated_at=now()
+      RETURNING id
+    `, [input.tenantSlug, input.businessName, input.legalName]);
+    await client.query(`
+      INSERT INTO control_plane.client_systems (
+        client_id,system_code,environment,external_tenant_id,external_tenant_slug,
+        base_url,status,configuration,provisioned_at
+      ) VALUES ($1,'food_app','PRODUCTION',$2,$3,$4,'ACTIVE',$5::jsonb,now())
+      ON CONFLICT (client_id,system_code,environment) DO UPDATE SET
+        external_tenant_id=EXCLUDED.external_tenant_id,
+        external_tenant_slug=EXCLUDED.external_tenant_slug,
+        base_url=EXCLUDED.base_url,status='ACTIVE',configuration=EXCLUDED.configuration,updated_at=now()
+    `, [controlClient.rows[0]!.id, tenant.id, input.tenantSlug,
+      `https://lojas.samjoe.com.br/${input.storeSlug}`,
+      JSON.stringify({ delivery_status: 'PENDING', provisional_url: `https://lojas.samjoe.com.br/${input.storeSlug}` })]);
 
     await client.query(`
       INSERT INTO audit_events (tenant_id, actor_type, action, entity_type, entity_id, after_data)

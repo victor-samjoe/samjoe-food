@@ -8,19 +8,23 @@ type Variant = { id: string; sku: string; name: string; price: Money; available:
 type Product = { id: string; name: string; description: string | null; image_url: string | null; variants: Variant[] };
 type Category = { id: string | null; name: string | null; slug: string | null; products: Product[] };
 type StorefrontConfig = { brand_subtitle:string; hero_eyebrow:string; hero_title:string; hero_description:string; primary_color:string; accent_color:string; background_color:string; header_background_color:string; brand_name_color:string; brand_subtitle_color:string; hero_eyebrow_color:string; hero_title_color:string; hero_description_color:string; hero_image_enabled:boolean; hero_image_url:string|null; hero_image_size:'SMALL'|'MEDIUM'|'LARGE'; hero_display_mode:'CORNER'|'FULLSCREEN'|'FLAME'|'CAROUSEL'; hero_images:string[]; hero_section_size:'COMPACT'|'NORMAL'|'TALL'; hero_image_fit:'FILL'|'FIT'; hero_image_scale:number; hero_image_position_x:number; hero_image_position_y:number; logo_url:string|null; font_family:'CLASSIC'|'MODERN'|'ROUNDED'; text_case:'AS_TYPED'|'UPPERCASE'; hero_bg_type?:'GRADIENT'|'COLOR'|'IMAGE'; hero_bg_color?:string|null; hero_bg_image_url?:string|null; hero_bg_image_scale:number; hero_bg_position_x:number; hero_bg_position_y:number };
-type Catalog = { store: { name: string; slug: string; timezone: string; storefront:Partial<StorefrontConfig>; delivery_enabled?:boolean; is_open?:boolean; open_now?:boolean; reason_closed?:string|null }; categories: Category[]; version: string };
+type FulfillmentConfig = { delivery_enabled: boolean; scheduled_delivery_enabled: boolean; pickup_in_person_enabled: boolean; pickup_by_app_enabled: boolean; pickup_scheduling_enabled: boolean };
+type PaymentConfig = { cash_enabled: boolean; card_on_site_enabled: boolean; pix_enabled: boolean; mercado_pago_enabled: boolean };
+type Catalog = { store: { name: string; slug: string; timezone: string; storefront:Partial<StorefrontConfig>; delivery_enabled?:boolean; is_open?:boolean; open_now?:boolean; reason_closed?:string|null; fulfillment_config?: FulfillmentConfig; payment_config?: PaymentConfig }; categories: Category[]; version: string };
 type CartItem = { productId: string; productName: string; imageUrl: string | null; variant: Variant; quantity: number };
-type Fulfillment = 'PICKUP' | 'DELIVERY';
-type PaymentMethod = 'CASH' | 'PIX' | 'MERCADO_PAGO';
+type Fulfillment = 'PICKUP' | 'DELIVERY' | 'DELIVERY_SCHEDULED' | 'PICKUP_BY_APP';
+type PaymentMethod = 'CASH' | 'CARD' | 'PIX' | 'MERCADO_PAGO';
 type CheckoutForm = {
   name: string; phone: string; fulfillment: Fulfillment; paymentMethod: PaymentMethod;
   street: string; number: string; complement: string; district: string; city: string; state: string; postalCode: string;
+  scheduledFor: string;
 };
 type Suggestion = { product_id:string; product_name:string; description:string|null; image_url:string|null; variant_id:string; price_cents:number; currency:string; order_count:number };
 
 const initialForm: CheckoutForm = {
   name: '', phone: '', fulfillment: 'PICKUP', paymentMethod: 'CASH',
   street: '', number: '', complement: '', district: '', city: '', state: 'SP', postalCode: '',
+  scheduledFor: '',
 };
 const defaultStorefront:StorefrontConfig={brand_subtitle:'Confeitaria artesanal',hero_eyebrow:'feito com calma, servido com carinho',hero_title:'Um pedaço de doçura para deixar o dia mais leve.',hero_description:'Escolha seus favoritos, monte o carrinho e envie seu pedido em poucos passos.',primary_color:'#9f3f35',accent_color:'#e7b55f',background_color:'#fffaf4',header_background_color:'#ffffff',brand_name_color:'#3f2d27',brand_subtitle_color:'#846f64',hero_eyebrow_color:'#9f3f35',hero_title_color:'#452d27',hero_description_color:'#795f53',hero_image_enabled:true,hero_image_url:null,hero_image_size:'MEDIUM',hero_display_mode:'CORNER',hero_images:[],hero_section_size:'NORMAL',hero_image_fit:'FILL',hero_image_scale:1,hero_image_position_x:50,hero_image_position_y:50,logo_url:null,font_family:'CLASSIC',text_case:'AS_TYPED',hero_bg_image_scale:1,hero_bg_position_x:50,hero_bg_position_y:50};
 
@@ -57,7 +61,8 @@ export default function Storefront({ storeSlug }: { storeSlug: string }) {
   const [checkoutOpen, setCheckoutOpen] = useState(false);
   const [form, setForm] = useState<CheckoutForm>(initialForm);
   const [submitting, setSubmitting] = useState(false);
-  const [order, setOrder] = useState<{ public_number: string; status: string; total: Money } | null>(null);
+  const [order, setOrder] = useState<{ id: string; public_number: string; status: string; total: Money; payment_method?: string } | null>(null);
+  const [mpCheckoutUrl, setMpCheckoutUrl] = useState<string | null>(null);
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [suggestionsPersonalized, setSuggestionsPersonalized] = useState(false);
   const [phoneLoading, setPhoneLoading] = useState(false);
@@ -199,23 +204,33 @@ export default function Storefront({ storeSlug }: { storeSlug: string }) {
       state: form.state.toUpperCase(), postal_code: form.postalCode.replace(/\D/g, ''),
     };
     try {
-      const created = await jsonRequest<{ public_number: string; status: string; total: Money }>(`/api/store/${encodedStoreSlug}/orders`, {
+      const created = await jsonRequest<{ id: string; public_number: string; status: string; total: Money; payment_method?: string }>(`/api/store/${encodedStoreSlug}/orders`, {
         method: 'POST',
         headers: { 'content-type': 'application/json', 'idempotency-key': crypto.randomUUID() },
         body: JSON.stringify({
           customer: { name: form.name, phone_e164: form.phone },
           fulfillment: form.fulfillment,
-          address: form.fulfillment === 'DELIVERY' ? address : null,
+          address: (form.fulfillment === 'DELIVERY' || form.fulfillment === 'DELIVERY_SCHEDULED' || form.fulfillment === 'PICKUP_BY_APP') ? address : null,
           delivery_quote_id: quoteId,
+          scheduled_for: form.scheduledFor || null,
           items: cartItems.map(item => ({ variant_id: item.variant.id, quantity: item.quantity })),
           payment_method: form.paymentMethod,
           notes: '',
         }),
       });
       setOrder(created);
+      setMpCheckoutUrl(null);
       setCart({});
       setCheckoutOpen(false);
       setCartOpen(false);
+      if (created.payment_method === 'MERCADO_PAGO' && created.id) {
+        try {
+          const mpResult = await jsonRequest<{ checkout_url: string }>(`/api/store/${encodedStoreSlug}/orders/${encodeURIComponent(created.id)}/mp-payment`, { method: 'POST' });
+          setMpCheckoutUrl(mpResult.checkout_url);
+        } catch {
+          /* checkout_url will be null, user can retry */
+        }
+      }
       await loadCatalog();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Não foi possível criar o pedido.');
@@ -310,6 +325,8 @@ export default function Storefront({ storeSlug }: { storeSlug: string }) {
                   cartItems={cartItems}
                   subtotal={subtotal}
                   deliveryEnabled={catalog?.store.delivery_enabled === true}
+                  fulfillmentConfig={catalog?.store.fulfillment_config}
+                  paymentConfig={catalog?.store.payment_config}
                 />}
           </>}
         </aside>
@@ -317,7 +334,13 @@ export default function Storefront({ storeSlug }: { storeSlug: string }) {
 
       {order && <div className={styles.orderOverlay} role="dialog" aria-modal="true" aria-label="Pedido confirmado"><div className={styles.orderSuccess}>
         <span className={styles.successIcon}>✓</span><span className={styles.kicker}>PEDIDO CRIADO</span><h2>Deu tudo certo!</h2><p>Seu pedido entrou no painel da loja.</p>
-        <strong className={styles.orderNumber}>{order.public_number}</strong><div className={styles.orderTotal}><span>Total</span><b>{money(order.total.amount_cents)}</b></div><button className={styles.primaryButton} onClick={() => setOrder(null)}>Voltar ao cardápio</button>
+        <strong className={styles.orderNumber}>{order.public_number}</strong><div className={styles.orderTotal}><span>Total</span><b>{money(order.total.amount_cents)}</b></div>
+        {order.payment_method === 'MERCADO_PAGO' && (
+          mpCheckoutUrl
+            ? <a className={styles.mpPayButton} href={mpCheckoutUrl} target="_blank" rel="noopener noreferrer">Pagar com Mercado Pago →</a>
+            : <p className={styles.mpPayLoading}>Gerando link de pagamento…</p>
+        )}
+        <button className={styles.primaryButton} onClick={() => { setOrder(null); setMpCheckoutUrl(null); }}>Voltar ao cardápio</button>
       </div></div>}
     </main>
     </>
@@ -338,12 +361,13 @@ function ProductCard({ product, index, onAdd }: { product: Product; index: numbe
   </article>;
 }
 
-function Checkout({ storeSlug, form, updateForm, submitting, onConfirm, onBack, phoneLoading, onPhoneChange, cartItems, subtotal, deliveryEnabled }: {
+function Checkout({ storeSlug, form, updateForm, submitting, onConfirm, onBack, phoneLoading, onPhoneChange, cartItems, subtotal, deliveryEnabled, fulfillmentConfig, paymentConfig }: {
   storeSlug: string;
   form: CheckoutForm; updateForm: <K extends keyof CheckoutForm>(key: K, value: CheckoutForm[K]) => void;
   submitting: boolean; onConfirm: (quoteId: string | null) => Promise<void>; onBack: () => void;
   phoneLoading: boolean; onPhoneChange: (value: string) => void;
   cartItems: CartItem[]; subtotal: number; deliveryEnabled: boolean;
+  fulfillmentConfig?: FulfillmentConfig | undefined; paymentConfig?: PaymentConfig | undefined;
 }) {
   const encodedStoreSlug = encodeURIComponent(storeSlug);
   const [step, setStep] = useState<'form'|'review'>('form');
@@ -384,16 +408,19 @@ function Checkout({ storeSlug, form, updateForm, submitting, onConfirm, onBack, 
     }
   }, [updateForm]);
 
+  const isDelivery = form.fulfillment === 'DELIVERY' || form.fulfillment === 'DELIVERY_SCHEDULED';
+  const needsAddress = isDelivery || form.fulfillment === 'PICKUP_BY_APP';
+
   useEffect(() => {
     const postalCode = form.postalCode.replace(/\D/g, '');
-    if (form.fulfillment === 'DELIVERY' && postalCode.length === 8 && lastPostalCodeLookup.current !== postalCode) {
+    if (needsAddress && postalCode.length === 8 && lastPostalCodeLookup.current !== postalCode) {
       void lookupPostalCode(postalCode);
     }
-  }, [form.fulfillment, form.postalCode, lookupPostalCode]);
+  }, [needsAddress, form.postalCode, lookupPostalCode]);
 
   async function handleContinue(event: FormEvent) {
     event.preventDefault();
-    if (form.fulfillment === 'DELIVERY') {
+    if (isDelivery) {
       const postalCode = form.postalCode.replace(/\D/g, '');
       const missingAddress = !form.street.trim() || !form.number.trim() || !form.complement.trim() || !form.district.trim() || !form.city.trim() || !/^[A-Z]{2}$/.test(form.state.trim().toUpperCase());
       if (postalCode !== verifiedPostalCode) {
@@ -427,9 +454,21 @@ function Checkout({ storeSlug, form, updateForm, submitting, onConfirm, onBack, 
     }
   }
 
+  const fulfillmentLabel: Record<Fulfillment, string> = {
+    PICKUP: 'Retirada no local',
+    DELIVERY: 'Entrega imediata',
+    DELIVERY_SCHEDULED: 'Entrega agendada',
+    PICKUP_BY_APP: 'Retirada via app (motoboy)',
+  };
+  const paymentLabel: Record<PaymentMethod, string> = {
+    CASH: 'Dinheiro',
+    CARD: 'Cartão (maquininha)',
+    PIX: 'Pix',
+    MERCADO_PAGO: 'Mercado Pago',
+  };
+
   if (step === 'review') {
     const total = subtotal + (deliveryFee ?? 0);
-    const payLabel = form.paymentMethod === 'CASH' ? 'Dinheiro' : form.paymentMethod === 'PIX' ? 'Pix' : 'Mercado Pago';
     return <div className={styles.checkoutReview}>
       <button type="button" className={styles.backButton} onClick={() => setStep('form')}>← Editar dados</button>
       <h3>Confirme seu pedido</h3>
@@ -442,15 +481,16 @@ function Checkout({ storeSlug, form, updateForm, submitting, onConfirm, onBack, 
       </div>
       <div className={styles.reviewTotals}>
         <div><span>Subtotal</span><span>{money(subtotal)}</span></div>
-        {form.fulfillment === 'DELIVERY' && <div><span>Entrega</span><span>{deliveryFee === 0 ? 'Grátis' : deliveryFee !== null ? money(deliveryFee) : '—'}</span></div>}
+        {isDelivery && <div><span>Entrega</span><span>{deliveryFee === 0 ? 'Grátis' : deliveryFee !== null ? money(deliveryFee) : '—'}</span></div>}
         <div className={styles.reviewTotal}><strong>Total</strong><strong>{money(total)}</strong></div>
       </div>
       <div className={styles.reviewInfo}>
         <div><span>Nome</span><strong>{form.name}</strong></div>
         <div><span>WhatsApp</span><strong>{form.phone}</strong></div>
-        {form.fulfillment === 'DELIVERY' && <div><span>Endereço</span><strong>{form.street}, {form.number}, {form.complement} — {form.district}, {form.city}-{form.state}</strong></div>}
-        <div><span>Modalidade</span><strong>{form.fulfillment === 'PICKUP' ? 'Retirada no local' : 'Entrega'}</strong></div>
-        <div><span>Pagamento</span><strong>{payLabel}</strong></div>
+        {needsAddress && <div><span>Endereço</span><strong>{form.street}, {form.number}, {form.complement} — {form.district}, {form.city}-{form.state}</strong></div>}
+        <div><span>Modalidade</span><strong>{fulfillmentLabel[form.fulfillment]}</strong></div>
+        {form.scheduledFor && <div><span>Agendado para</span><strong>{new Date(form.scheduledFor).toLocaleString('pt-BR')}</strong></div>}
+        <div><span>Pagamento</span><strong>{paymentLabel[form.paymentMethod]}</strong></div>
       </div>
       <button className={styles.primaryButton} disabled={submitting} onClick={() => void onConfirm(quoteId)}>
         {submitting ? 'Confirmando…' : `Confirmar · ${money(total)}`}
@@ -470,18 +510,31 @@ function Checkout({ storeSlug, form, updateForm, submitting, onConfirm, onBack, 
       </div>}
     </div>
     <button type="button" className={styles.backButton} onClick={onBack}>← Voltar para o carrinho</button><h3>Seus dados</h3>
-    <div className={styles.segmented}><button type="button" className={form.fulfillment === 'PICKUP' ? styles.segmentActive : ''} onClick={() => updateForm('fulfillment', 'PICKUP')}>Retirada</button><button type="button" disabled={!deliveryEnabled} title={!deliveryEnabled?'Entrega em configuração. Escolha retirada.':undefined} className={form.fulfillment === 'DELIVERY' ? styles.segmentActive : ''} onClick={() => updateForm('fulfillment', 'DELIVERY')}>Entrega</button></div>
-    {!deliveryEnabled&&<p className={styles.checkoutHint}>Entrega em configuração. No momento, escolha retirada no local.</p>}
+    <div className={styles.segmented}>
+      {(fulfillmentConfig?.pickup_in_person_enabled ?? true) && <button type="button" className={form.fulfillment === 'PICKUP' ? styles.segmentActive : ''} onClick={() => updateForm('fulfillment', 'PICKUP')}>Retirada no local</button>}
+      {(fulfillmentConfig?.pickup_by_app_enabled) && <button type="button" className={form.fulfillment === 'PICKUP_BY_APP' ? styles.segmentActive : ''} onClick={() => updateForm('fulfillment', 'PICKUP_BY_APP')}>Motoboy via app</button>}
+      {(fulfillmentConfig?.delivery_enabled ?? deliveryEnabled) && <button type="button" className={form.fulfillment === 'DELIVERY' ? styles.segmentActive : ''} onClick={() => updateForm('fulfillment', 'DELIVERY')}>Entrega</button>}
+      {(fulfillmentConfig?.scheduled_delivery_enabled) && <button type="button" className={form.fulfillment === 'DELIVERY_SCHEDULED' ? styles.segmentActive : ''} onClick={() => updateForm('fulfillment', 'DELIVERY_SCHEDULED')}>Entrega agendada</button>}
+    </div>
+    {!deliveryEnabled&&!fulfillmentConfig&&<p className={styles.checkoutHint}>Entrega em configuração. No momento, escolha retirada no local.</p>}
     <label>WhatsApp {phoneLoading&&<span className={styles.phoneSpinner}>…</span>}<div className={styles.phoneInput}><span className={styles.phonePrefix}>+55</span><input required placeholder="(11) 98765-4321" value={rawPhone} onChange={e=>{setRawPhone(e.target.value);onPhoneChange(normalizeBRPhone(e.target.value));}}/></div></label>
     <label>Seu nome<input required value={form.name} onChange={event => updateForm('name', event.target.value)} placeholder="Como prefere ser chamado?" /></label>
-    {form.fulfillment === 'DELIVERY' && <div className={styles.addressFields}>
+    {needsAddress && <div className={styles.addressFields}>
       <label className={styles.wide}>CEP<div className={styles.postalCodeField}><input required inputMode="numeric" autoComplete="postal-code" maxLength={9} value={form.postalCode} onChange={event => {const value=event.target.value;updateForm('postalCode',value);if(value.replace(/\D/g,'')!==verifiedPostalCode)setVerifiedPostalCode('');}} placeholder="00000-000"/><button type="button" disabled={postalCodeLoading||form.postalCode.replace(/\D/g,'').length!==8} onClick={()=>void lookupPostalCode(form.postalCode)}>{postalCodeLoading?'Buscando…':'Buscar CEP'}</button></div>{verifiedPostalCode&&<small className={styles.postalCodeSuccess}>✓ CEP localizado</small>}</label>
       <label className={styles.wide}>Rua<input required autoComplete="address-line1" value={form.street} onChange={event => updateForm('street', event.target.value)} /></label><label>Número<input required autoComplete="address-line2" value={form.number} onChange={event => updateForm('number', event.target.value)} /></label>
       <label>Complemento<input required value={form.complement} onChange={event => updateForm('complement', event.target.value)} placeholder="Apto., bloco ou casa" /></label>
       <label>Bairro<input required value={form.district} onChange={event => updateForm('district', event.target.value)} /></label><label>Cidade<input required value={form.city} onChange={event => updateForm('city', event.target.value)} /></label>
       <label>UF<input required maxLength={2} autoComplete="address-level1" value={form.state} onChange={event => updateForm('state', event.target.value)} /></label>
     </div>}
-    <label>Pagamento<select value={form.paymentMethod} onChange={event => updateForm('paymentMethod', event.target.value as PaymentMethod)}><option value="CASH">Dinheiro na retirada/entrega</option><option value="PIX">Pix</option><option value="MERCADO_PAGO">Mercado Pago</option></select></label>
+    {(form.fulfillment === 'DELIVERY_SCHEDULED' || (form.fulfillment === 'PICKUP' && fulfillmentConfig?.pickup_scheduling_enabled)) && (
+      <label>Quando? (agendamento)<input type="datetime-local" required value={form.scheduledFor} onChange={e => updateForm('scheduledFor', e.target.value)} min={new Date(Date.now() + 30*60*1000).toISOString().slice(0,16)} /></label>
+    )}
+    <label>Pagamento<select value={form.paymentMethod} onChange={event => updateForm('paymentMethod', event.target.value as PaymentMethod)}>
+      {(paymentConfig?.cash_enabled ?? true) && <option value="CASH">Dinheiro na entrega/retirada</option>}
+      {(paymentConfig?.card_on_site_enabled) && <option value="CARD">Cartão na entrega/retirada</option>}
+      {(paymentConfig?.pix_enabled ?? true) && <option value="PIX">Pix</option>}
+      {(paymentConfig?.mercado_pago_enabled) && <option value="MERCADO_PAGO">Mercado Pago</option>}
+    </select></label>
     {quoteError && <p className={styles.quoteError}>{quoteError}</p>}
     <button className={styles.primaryButton} disabled={quoteLoading||postalCodeLoading}>{quoteLoading ? 'Calculando frete…' : postalCodeLoading ? 'Localizando CEP…' : 'Revisar pedido →'}</button>
   </form>;

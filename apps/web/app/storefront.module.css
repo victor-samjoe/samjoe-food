@@ -87,6 +87,8 @@
 .orderSuccess { width: min(420px, 100%); background: #fffaf4; padding: 38px; text-align: center; box-shadow: 0 25px 80px rgba(33,20,16,.3); }.successIcon { width: 58px; height: 58px; border-radius: 50%; display: grid; place-items: center; margin: 0 auto 18px; background: #6f916f; color: white; font-size: 27px; }
 .orderSuccess h2 { margin: 8px 0; font: 500 37px Georgia, serif; }.orderSuccess p { color: #7e6a60; }.orderNumber { display: block; padding: 15px; margin: 22px 0 10px; background: #f2e5d9; color: #8f392f; letter-spacing: .1em; }
 .orderTotal { display: flex; justify-content: space-between; margin-bottom: 20px; color: #705b51; }.orderTotal b { color: #3c2a24; }
+.mpPayButton { display: block; width: 100%; margin-bottom: 12px; padding: 14px; background: #009ee3; color: #fff; font-weight: 800; font-size: 15px; border-radius: 3px; text-decoration: none; text-align: center; }
+.mpPayLoading { color: #7e6a60; font-size: 13px; margin-bottom: 12px; }
 @media (max-width: 860px) {
   .adminLinks { display: none; }.hero { min-height: auto; grid-template-columns: 1fr; padding-top: 55px; }.heroCopy { text-align: center; margin: auto; }.heroCopy p { margin-left: auto; margin-right: auto; }
   .heroArt { height: 350px; }.sun { width: 270px; height: 270px; }.cake { transform: scale(.85); }.productGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }.catalogHeading { align-items: stretch; flex-direction: column; }.search { width: 100%; }
