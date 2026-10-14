@@ -43,27 +43,39 @@
 /* Date filter bar and orders toolbar right */
 .ordersToolbarRight{display:flex;align-items:center;gap:10px}.dateFilterBar{display:flex;align-items:center;gap:7px;font-size:12px;font-weight:700;color:#685d57}.dateFilterBar label{display:flex;align-items:center;gap:6px}.dateFilterBar span{white-space:nowrap}.dateFilterBar input[type="date"]{border:1px solid #d3c8c0;border-radius:9px;background:#fff;padding:7px 10px;font:inherit;font-size:12px;color:#352620;cursor:pointer}.dateFilterBar button{border:1px solid #d3c8c0;border-radius:9px;background:#fff;color:#a9483e;padding:7px 11px;font-size:11px;font-weight:800;cursor:pointer}
 
-/* Store open/closed toggle banner */
-.storeStatusBanner{display:flex;align-items:center;justify-content:space-between;gap:18px;padding:20px 24px;border-radius:16px;margin-bottom:16px;flex-wrap:wrap}
-.storeOpen{background:linear-gradient(120deg,#e8f5e8,#d4edda);border:1.5px solid #b2d9b6}
-.storeClosed{background:linear-gradient(120deg,#fde8e6,#f8d5d1);border:1.5px solid #f0b9b3}
-.storeStatusBanner .kicker{display:block;margin-bottom:3px}
-.storeOpen .kicker{color:#2d6f30}
-.storeClosed .kicker{color:#9a3c34}
-.storeStatusBanner h2{margin:0;font:600 26px Georgia,serif}
-.storeOpen h2{color:#1e5222}
-.storeClosed h2{color:#7a2e28}
-.storeStatusBanner p{margin:4px 0 0;font-size:12px}
-.storeOpen p{color:#2e6b32}
-.storeClosed p{color:#8a4040}
-.storeStatusActions{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
-.reasonInput{border:1px solid #e0c5c2;border-radius:10px;padding:9px 13px;font:inherit;font-size:13px;background:#fff;min-width:220px}
-.openStoreButton{border:0;border-radius:12px;background:#a9483e;color:#fff;padding:12px 22px;font-weight:800;cursor:pointer;font-size:14px}
-.openStoreButton:disabled{opacity:.55;cursor:progress}
-.closeStoreButton{border:1px solid #c0b0ac;border-radius:12px;background:#fff;color:#5a4f49;padding:11px 22px;font-weight:800;cursor:pointer;font-size:14px}
-.closeStoreButton:hover{background:#f9f0ee;border-color:#d0a8a2;color:#9a3c34}
-.closeStoreButton:disabled{opacity:.55;cursor:progress}
-@media(max-width:600px){.storeStatusBanner{padding:15px 16px}.storeStatusActions{width:100%}.reasonInput{flex:1;min-width:0}}
+/* Store status topbar control */
+.storeStatusControl{display:flex;align-items:center;gap:4px}
+.storeTogglePill{display:flex;align-items:center;gap:6px;border-radius:99px;border:1px solid transparent;padding:7px 12px;font-weight:800;font-size:12px;cursor:pointer;transition:background .12s,border-color .12s;white-space:nowrap}
+.pillOpen{background:#e8f5e8;border-color:#9ec9a0;color:#1e5222}
+.pillOpen:hover{background:#d4edda}
+.pillClosed{background:#fde8e6;border-color:#f0b9b3;color:#7a2e28}
+.pillClosed:hover{background:#f8d5d1}
+.storeTogglePill:disabled{opacity:.55;cursor:progress}
+.statusDot{width:7px;height:7px;border-radius:50%;flex-shrink:0;background:currentColor;opacity:.7}
+.pillOpen .statusDot{opacity:1;background:#2d7a2d}
+.pillClosed .statusDot{opacity:1;background:#c0392b}
+.hoursAnchor{position:relative}
+.hoursGearButton{border:1px solid #d3c8c0!important;border-radius:10px!important;background:#fff!important;color:#554942!important;padding:7px 9px!important;cursor:pointer;font-size:15px!important;line-height:1}
+.hoursGearButton:hover{background:#f4ede7!important;color:#a9483e!important}
+.hoursConfigPopover{position:absolute;right:0;top:calc(100% + 10px);z-index:60;width:min(420px,calc(100vw - 28px));padding:18px;background:#fff;border:1px solid #ddd2ca;border-radius:18px;box-shadow:0 24px 65px #2d24213d}
+.hoursConfigPopover:before{content:'';position:absolute;right:12px;top:-7px;width:13px;height:13px;background:#fff;border-left:1px solid #ddd2ca;border-top:1px solid #ddd2ca;transform:rotate(45deg)}
+.hoursConfigPopover>header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px;gap:10px}
+.hoursConfigPopover>header div{display:grid;gap:2px}
+.hoursConfigPopover>header strong{font:600 18px Georgia,serif}
+.hoursConfigPopover>header small{color:#8a7d75;font-size:11px}
+.hoursConfigPopover>header button{border:0;border-radius:50%;background:#eee8e3;width:30px;height:30px;font-size:18px;cursor:pointer;flex-shrink:0}
+.reasonLabel{display:grid;gap:5px;font-size:11px;font-weight:800;color:#7a2e28;margin-bottom:13px}
+.reasonInput{border:1px solid #e0c5c2;border-radius:9px;padding:9px 12px;font:inherit;font-size:13px;background:#fff;width:100%;box-sizing:border-box}
+.hoursGrid{display:grid;gap:8px;margin-bottom:14px}
+.hoursDayRow{display:flex;align-items:center;gap:8px;min-height:34px}
+.dayCheck{display:flex;align-items:center;gap:6px;width:80px;font-size:12px;font-weight:700;cursor:pointer;flex-shrink:0;color:#4a3e38}
+.dayCheck input[type="checkbox"]{accent-color:#a9483e;width:14px;height:14px;flex-shrink:0;cursor:pointer}
+.timeInput{border:1px solid #d7cdc6;border-radius:7px;padding:6px 8px;font:inherit;font-size:12px;width:82px}
+.timeSep{color:#8a7d75;font-size:14px;font-weight:700;flex-shrink:0}
+.saveHoursButton{width:100%;border:0;border-radius:11px;background:#a9483e;color:#fff;padding:11px;font-weight:800;cursor:pointer;font-size:13px;margin-top:2px}
+.saveHoursButton:disabled{opacity:.55;cursor:progress}
+@media(max-width:900px){.hoursConfigPopover{position:fixed;left:50%;right:auto;top:50%;transform:translate(-50%,-50%);max-height:86vh;overflow:auto}.hoursConfigPopover:before{display:none}}
+@media(max-width:600px){.storeTogglePill{font-size:11px;padding:7px 10px}.hoursConfigPopover{position:fixed;inset:16px auto auto 16px;right:16px;top:auto;bottom:20px;transform:none;max-height:80vh;overflow:auto}}
 
 /* Resultado explícito do simulador de frete. */
 .freightResult{display:grid;gap:4px;margin-top:9px;padding:11px;border-radius:10px;font-size:12px}.freightResult[data-kind="success"]{background:#e8f3e6;color:#35683a}.freightResult[data-kind="error"]{background:#f9e7e5;color:#943b34}.freightResult small{font-size:10px;opacity:.82}

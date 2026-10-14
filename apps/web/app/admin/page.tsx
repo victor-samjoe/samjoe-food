@@ -142,6 +142,7 @@ type StorefrontConfig = {
   hero_bg_position_x: number;
   hero_bg_position_y: number;
 };
+type BusinessHoursDay = { open: boolean; from: string | null; to: string | null };
 type Store = {
   store_id: string;
   store_slug: string;
@@ -154,6 +155,7 @@ type Store = {
   delivery_status?: "PENDING" | "ACTIVE";
   is_open?: boolean;
   is_open_reason?: string | null;
+  business_hours?: Record<string, BusinessHoursDay> | null;
 };
 type DeliveryPricing = {
   id: string;
@@ -342,6 +344,16 @@ async function api<T>(
   return body as T;
 }
 
+const DAYS = [
+  { key: "monday", label: "Segunda" },
+  { key: "tuesday", label: "Terça" },
+  { key: "wednesday", label: "Quarta" },
+  { key: "thursday", label: "Quinta" },
+  { key: "friday", label: "Sexta" },
+  { key: "saturday", label: "Sábado" },
+  { key: "sunday", label: "Domingo" },
+] as const;
+
 export default function AdminPage() {
   const [tab, setTab] = useState<Tab>("overview");
   const [token, setToken] = useState("");
@@ -430,6 +442,8 @@ export default function AdminPage() {
     string | null | undefined
   >(undefined);
   const [isOpenReason, setIsOpenReason] = useState("");
+  const [showHoursConfig, setShowHoursConfig] = useState(false);
+  const [hoursForm, setHoursForm] = useState<Record<string, BusinessHoursDay>>({});
 
   useEffect(() => {
     if (store?.store_name) document.title = `${store.store_name} — Admin`;
@@ -961,13 +975,30 @@ export default function AdminPage() {
           method: "PATCH",
           body: JSON.stringify({
             is_open: newIsOpen,
-            is_open_reason: newIsOpen ? null : isOpenReason.trim() || null,
+            ...(newIsOpen ? { is_open_reason: null } : {}),
           }),
         }),
       newIsOpen ? "Loja aberta." : "Loja fechada.",
       true,
     );
     if (newIsOpen) setIsOpenReason("");
+  }
+  async function saveBusinessHours() {
+    if (!store) return;
+    await run(
+      "store-hours",
+      () =>
+        api(`admin/stores/${store.store_slug}`, token, {
+          method: "PATCH",
+          body: JSON.stringify({
+            business_hours: hoursForm,
+            is_open_reason: isOpenReason.trim() || null,
+          }),
+        }),
+      "Horário salvo.",
+      true,
+    );
+    setShowHoursConfig(false);
   }
   async function attachProductImage(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
@@ -1402,6 +1433,134 @@ export default function AdminPage() {
           </div>
           <div className={styles.topActions}>
             <button onClick={() => void loadAll(token)}>↻ Atualizar</button>
+            {store && (
+              <div className={styles.storeStatusControl}>
+                <button
+                  className={`${styles.storeTogglePill} ${(store.is_open ?? true) ? styles.pillOpen : styles.pillClosed}`}
+                  disabled={busy === "store-open"}
+                  onClick={() => void toggleStoreOpen()}
+                  title={(store.is_open ?? true) ? "Clique para fechar a loja" : "Clique para abrir a loja"}
+                >
+                  <span className={styles.statusDot} />
+                  {busy === "store-open" ? "Salvando…" : (store.is_open ?? true) ? "Aberta" : "Fechada"}
+                </button>
+                <div className={styles.hoursAnchor}>
+                  <button
+                    className={styles.hoursGearButton}
+                    onClick={() => {
+                      setHoursForm((store.business_hours as Record<string, BusinessHoursDay>) ?? {});
+                      setShowHoursConfig((v) => !v);
+                    }}
+                    aria-label="Configurar horário de funcionamento"
+                    title="Horário de funcionamento"
+                  >
+                    ⚙
+                  </button>
+                  {showHoursConfig && (
+                    <div
+                      className={styles.hoursConfigPopover}
+                      role="dialog"
+                      aria-label="Horário de funcionamento"
+                    >
+                      <header>
+                        <div>
+                          <strong>Horário de funcionamento</strong>
+                          <small>
+                            Define quando a loja abre/fecha automaticamente
+                          </small>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setShowHoursConfig(false)}
+                        >
+                          ×
+                        </button>
+                      </header>
+                      {!(store.is_open ?? true) && (
+                        <label className={styles.reasonLabel}>
+                          Motivo do fechamento (opcional)
+                          <input
+                            placeholder="Ex: Feriado, manutenção…"
+                            value={isOpenReason}
+                            onChange={(e) => setIsOpenReason(e.target.value)}
+                            className={styles.reasonInput}
+                          />
+                        </label>
+                      )}
+                      <div className={styles.hoursGrid}>
+                        {DAYS.map(({ key, label }) => {
+                          const day: BusinessHoursDay = hoursForm[key] ?? {
+                            open: false,
+                            from: null,
+                            to: null,
+                          };
+                          return (
+                            <div key={key} className={styles.hoursDayRow}>
+                              <label className={styles.dayCheck}>
+                                <input
+                                  type="checkbox"
+                                  checked={day.open}
+                                  onChange={(e) =>
+                                    setHoursForm((f) => ({
+                                      ...f,
+                                      [key]: {
+                                        ...day,
+                                        open: e.target.checked,
+                                      },
+                                    }))
+                                  }
+                                />
+                                <span>{label}</span>
+                              </label>
+                              {day.open && (
+                                <>
+                                  <input
+                                    type="time"
+                                    value={day.from ?? ""}
+                                    className={styles.timeInput}
+                                    onChange={(e) =>
+                                      setHoursForm((f) => ({
+                                        ...f,
+                                        [key]: {
+                                          ...day,
+                                          from: e.target.value || null,
+                                        },
+                                      }))
+                                    }
+                                  />
+                                  <span className={styles.timeSep}>–</span>
+                                  <input
+                                    type="time"
+                                    value={day.to ?? ""}
+                                    className={styles.timeInput}
+                                    onChange={(e) =>
+                                      setHoursForm((f) => ({
+                                        ...f,
+                                        [key]: {
+                                          ...day,
+                                          to: e.target.value || null,
+                                        },
+                                      }))
+                                    }
+                                  />
+                                </>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                      <button
+                        className={styles.saveHoursButton}
+                        onClick={() => void saveBusinessHours()}
+                        disabled={busy === "store-hours"}
+                      >
+                        {busy === "store-hours" ? "Salvando…" : "Salvar horários"}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
             <div className={styles.noticeAnchor}>
               <button
                 className={styles.noticeButton}
@@ -1480,34 +1639,6 @@ export default function AdminPage() {
         <div className={styles.content}>
           {tab === "overview" && (
             <>
-              {store && (
-                <section className={`${styles.storeStatusBanner} ${(store.is_open ?? true) ? styles.storeOpen : styles.storeClosed}`}>
-                  <div>
-                    <span className={styles.kicker}>STATUS DA LOJA</span>
-                    <h2>{(store.is_open ?? true) ? "Loja Aberta" : "Loja Fechada"}</h2>
-                    {!(store.is_open ?? true) && store.is_open_reason && (
-                      <p>{store.is_open_reason}</p>
-                    )}
-                  </div>
-                  <div className={styles.storeStatusActions}>
-                    {!(store.is_open ?? true) && (
-                      <input
-                        placeholder="Motivo do fechamento (opcional)"
-                        value={isOpenReason}
-                        onChange={(e) => setIsOpenReason(e.target.value)}
-                        className={styles.reasonInput}
-                      />
-                    )}
-                    <button
-                      className={(store.is_open ?? true) ? styles.closeStoreButton : styles.openStoreButton}
-                      disabled={busy === "store-open"}
-                      onClick={() => void toggleStoreOpen()}
-                    >
-                      {busy === "store-open" ? "Salvando…" : (store.is_open ?? true) ? "Fechar loja" : "Abrir loja"}
-                    </button>
-                  </div>
-                </section>
-              )}
               <section className={styles.hero}>
                 <div>
                   <span className={styles.kicker}>RESUMO DE HOJE</span>
