@@ -98,6 +98,45 @@ test('catálogo troca imagens Base64 por URLs de mídia cacheáveis', async () =
   await app.close();
 });
 
+test('catálogo converte hero_slides com Base64 em URLs de mídia cacheáveis por índice', async () => {
+  const image0 = 'data:image/webp;base64,QUJDRA==';
+  const image1 = 'data:image/webp;base64,REVGSA==';
+  const slidesPool: TransactionalDatabase = {
+    async query<T extends QueryResultRow>(_sql: string, values?: unknown[]): Promise<{ rows: T[] }> {
+      if (!values) return { rows: [{ '?column?': 1 } as unknown as T] };
+      return {
+        rows: [{
+          ...stores['doce-horizonte-centro'][0],
+          storefront_config: {
+            hero_slides: [
+              { image_url: image0, scale: 1.1, position_x: 40, position_y: 55 },
+              { image_url: image1, scale: 1,   position_x: 50, position_y: 50 },
+            ],
+          },
+          store_updated_at: '2026-10-16T12:00:00.000Z',
+          cover_image_url: null,
+          product_updated_at: '2026-10-16T12:01:00.000Z',
+        } as unknown as T],
+      };
+    },
+    async transaction<T>(operation: (database: Database) => Promise<T>): Promise<T> { return operation(slidesPool); },
+  };
+  const app = buildApp({ pool: slidesPool });
+  const res = await app.inject({ method: 'GET', url: '/v1/public/stores/doce-horizonte-centro/catalog' });
+  assert.equal(res.statusCode, 200);
+  const body = res.json();
+  assert.doesNotMatch(res.body, /data:image/, 'nenhuma URL Base64 deve aparecer no catálogo');
+  const slides = body.store.storefront.hero_slides;
+  assert.ok(Array.isArray(slides), 'hero_slides deve ser array');
+  assert.equal(slides.length, 2);
+  assert.match(slides[0].image_url, /\/api\/store\/doce-horizonte-centro\/media\/storefront\/hero_slides\/0\?v=/);
+  assert.match(slides[1].image_url, /\/api\/store\/doce-horizonte-centro\/media\/storefront\/hero_slides\/1\?v=/);
+  assert.equal(slides[0].scale, 1.1, 'scale deve ser preservado');
+  assert.equal(slides[0].position_x, 40, 'position_x deve ser preservado');
+  assert.equal(slides[0].position_y, 55, 'position_y deve ser preservado');
+  await app.close();
+});
+
 test('variante TRACKED sem estoque aparece como indisponível', async () => {
   const trackedPool: TransactionalDatabase = {
     async query<T extends QueryResultRow>(_sql: string, values?: unknown[]): Promise<{ rows: T[] }> {

@@ -113,6 +113,7 @@ type Address = {
   postal_code: string;
   reference: string;
 };
+type HeroSlide = { image_url: string; scale: number; position_x: number; position_y: number };
 type StorefrontConfig = {
   brand_subtitle: string;
   hero_eyebrow: string;
@@ -133,6 +134,10 @@ type StorefrontConfig = {
   hero_image_size: "SMALL" | "MEDIUM" | "LARGE";
   hero_display_mode: "CORNER" | "FULLSCREEN" | "FLAME" | "CAROUSEL";
   hero_images: string[];
+  hero_slides?: HeroSlide[];
+  hero_overlay_opacity?: number;
+  hero_carousel_position?: "LEFT" | "RIGHT" | "BOTTOM";
+  hero_carousel_ratio?: "BLOB" | "SQUARE" | "CIRCLE" | "PORTRAIT" | "LANDSCAPE";
   hero_section_size: "COMPACT" | "NORMAL" | "TALL";
   hero_image_fit: "FILL" | "FIT";
   hero_image_scale: number;
@@ -317,6 +322,9 @@ const defaultStorefront: StorefrontConfig = {
   hero_image_size: "MEDIUM",
   hero_display_mode: "CORNER",
   hero_images: [],
+  hero_overlay_opacity: 0,
+  hero_carousel_position: "RIGHT",
+  hero_carousel_ratio: "BLOB",
   hero_section_size: "NORMAL",
   hero_image_fit: "FILL",
   hero_image_scale: 1,
@@ -442,6 +450,7 @@ export default function AdminPage() {
   const [showFreteTest, setShowFreteTest] = useState(false);
   const [storefront, setStorefront] =
     useState<StorefrontConfig>(defaultStorefront);
+  const [selectedSlideIndex, setSelectedSlideIndex] = useState(0);
   const [storeStep, setStoreStep] = useState(0);
   const [freteTest, setFreteTest] = useState({
     street: "",
@@ -862,6 +871,13 @@ export default function AdminPage() {
     setBusy(key);
     try {
       await operation();
+      if (store?.store_slug) {
+        await fetch('/api/admin/purge-catalog', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ storeSlug: store.store_slug }),
+        }).catch(() => undefined);
+      }
       if (success) pushNotice(success);
       if (fullRefresh) await loadAll(token);
       else await loadOpsData(token);
@@ -1444,16 +1460,23 @@ export default function AdminPage() {
       pushNotice("Escolha um arquivo de imagem válido.", "error");
       return;
     }
-    if (storefront.hero_images.length >= 5) {
+    const currentSlides = storefront.hero_slides?.length
+      ? storefront.hero_slides
+      : storefront.hero_images.map((url) => ({ image_url: url, scale: 1, position_x: 50, position_y: 50 }));
+    if (currentSlides.length >= 5) {
       pushNotice("Máximo de 5 imagens no carrossel.", "error");
       return;
     }
     try {
       const image = await resizeImage(file, 1600, 1000);
-      setStorefront((current) => ({
-        ...current,
-        hero_images: [...current.hero_images, image],
-      }));
+      const newSlide: HeroSlide = { image_url: image, scale: 1, position_x: 50, position_y: 50 };
+      setStorefront((current) => {
+        const slides = current.hero_slides?.length
+          ? current.hero_slides
+          : current.hero_images.map((url) => ({ image_url: url, scale: 1, position_x: 50, position_y: 50 }));
+        return { ...current, hero_slides: [...slides, newSlide] };
+      });
+      setSelectedSlideIndex(currentSlides.length);
       pushNotice("Imagem adicionada ao carrossel.");
     } catch (cause) {
       pushNotice(message(cause), "error");
@@ -3701,6 +3724,22 @@ export default function AdminPage() {
                           )}
                         </>
                       )}
+                      {storefront.hero_bg_type === "IMAGE" && (
+                        <RangeField
+                          label="Opacidade da camada fosca"
+                          value={storefront.hero_overlay_opacity ?? 0}
+                          min={0}
+                          max={90}
+                          step={5}
+                          display={`${storefront.hero_overlay_opacity ?? 0}%`}
+                          onChange={(value) =>
+                            setStorefront((current) => ({
+                              ...current,
+                              hero_overlay_opacity: value,
+                            }))
+                          }
+                        />
+                      )}
                       <label className={styles.wideField}>
                         Logo da loja
                         <div className={styles.uploadField}>
@@ -3823,42 +3862,129 @@ export default function AdminPage() {
                         </select>
                       </label>
                       {storefront.hero_display_mode === "CAROUSEL" ? (
-                        <label className={styles.wideField}>
-                          Imagens do carrossel ({storefront.hero_images.length}
-                          /5)
-                          <div className={styles.carouselThumbs}>
-                            {storefront.hero_images.map((img, i) => (
-                              <div key={i} className={styles.carouselThumb}>
-                                <img src={img} alt={`Slide ${i + 1}`} />
-                                <button
-                                  type="button"
-                                  onClick={() =>
+                        (() => {
+                          const heroSlides: HeroSlide[] = storefront.hero_slides?.length
+                            ? storefront.hero_slides
+                            : storefront.hero_images.map((url) => ({ image_url: url, scale: 1, position_x: 50, position_y: 50 }));
+                          const safeIdx = Math.min(selectedSlideIndex, Math.max(0, heroSlides.length - 1));
+                          const currentSlide = heroSlides[safeIdx];
+                          function updateSlide(field: keyof Omit<HeroSlide, "image_url">, value: number) {
+                            setStorefront((current) => {
+                              const slides = current.hero_slides?.length
+                                ? current.hero_slides
+                                : current.hero_images.map((url) => ({ image_url: url, scale: 1, position_x: 50, position_y: 50 }));
+                              return { ...current, hero_slides: slides.map((s, j) => j === safeIdx ? { ...s, [field]: value } : s) };
+                            });
+                          }
+                          return (
+                            <>
+                              <label>
+                                Posição do carrossel
+                                <select
+                                  value={storefront.hero_carousel_position ?? "RIGHT"}
+                                  onChange={(e) =>
                                     setStorefront((current) => ({
                                       ...current,
-                                      hero_images: current.hero_images.filter(
-                                        (_, j) => j !== i,
-                                      ),
+                                      hero_carousel_position: e.target.value as "LEFT" | "RIGHT" | "BOTTOM",
                                     }))
                                   }
                                 >
-                                  ×
-                                </button>
-                              </div>
-                            ))}
-                            {storefront.hero_images.length < 5 && (
-                              <label className={styles.carouselAdd}>
-                                <input
-                                  type="file"
-                                  accept="image/*"
-                                  style={{ display: "none" }}
-                                  onChange={(e) => void attachCarouselImage(e)}
-                                />
-                                <span>+</span>
-                                <small>Adicionar</small>
+                                  <option value="RIGHT">Direita</option>
+                                  <option value="LEFT">Esquerda</option>
+                                  <option value="BOTTOM">Embaixo</option>
+                                </select>
                               </label>
-                            )}
-                          </div>
-                        </label>
+                              <label>
+                                Formato do carrossel
+                                <select
+                                  value={storefront.hero_carousel_ratio ?? "BLOB"}
+                                  onChange={(e) =>
+                                    setStorefront((current) => ({
+                                      ...current,
+                                      hero_carousel_ratio: e.target.value as "BLOB" | "SQUARE" | "CIRCLE" | "PORTRAIT" | "LANDSCAPE",
+                                    }))
+                                  }
+                                >
+                                  <option value="BLOB">Orgânico</option>
+                                  <option value="SQUARE">Quadrado</option>
+                                  <option value="CIRCLE">Círculo</option>
+                                  <option value="PORTRAIT">Retrato</option>
+                                  <option value="LANDSCAPE">Paisagem</option>
+                                </select>
+                              </label>
+                              <label className={styles.wideField}>
+                                Imagens do carrossel ({heroSlides.length}/5)
+                                <div className={styles.carouselThumbs}>
+                                  {heroSlides.map((slide, i) => (
+                                    <div
+                                      key={i}
+                                      className={`${styles.carouselThumb}${i === safeIdx ? ` ${styles.carouselThumbActive}` : ""}`}
+                                      onClick={() => setSelectedSlideIndex(i)}
+                                    >
+                                      <img src={slide.image_url} alt={`Slide ${i + 1}`} />
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setStorefront((current) => {
+                                            const slides = current.hero_slides?.length
+                                              ? current.hero_slides
+                                              : current.hero_images.map((url) => ({ image_url: url, scale: 1, position_x: 50, position_y: 50 }));
+                                            return { ...current, hero_slides: slides.filter((_, j) => j !== i) };
+                                          });
+                                          if (selectedSlideIndex >= heroSlides.length - 1) setSelectedSlideIndex(Math.max(0, heroSlides.length - 2));
+                                        }}
+                                      >
+                                        ×
+                                      </button>
+                                    </div>
+                                  ))}
+                                  {heroSlides.length < 5 && (
+                                    <label className={styles.carouselAdd}>
+                                      <input
+                                        type="file"
+                                        accept="image/*"
+                                        style={{ display: "none" }}
+                                        onChange={(e) => void attachCarouselImage(e)}
+                                      />
+                                      <span>+</span>
+                                      <small>Adicionar</small>
+                                    </label>
+                                  )}
+                                </div>
+                              </label>
+                              {currentSlide && (
+                                <>
+                                  <RangeField
+                                    label={`Zoom — Slide ${safeIdx + 1}`}
+                                    value={currentSlide.scale}
+                                    min={1}
+                                    max={2}
+                                    step={0.05}
+                                    display={`${Math.round(currentSlide.scale * 100)}%`}
+                                    onChange={(value) => updateSlide("scale", value)}
+                                  />
+                                  <RangeField
+                                    label="Posição horizontal"
+                                    value={currentSlide.position_x}
+                                    min={0}
+                                    max={100}
+                                    display={`${currentSlide.position_x}%`}
+                                    onChange={(value) => updateSlide("position_x", value)}
+                                  />
+                                  <RangeField
+                                    label="Posição vertical"
+                                    value={currentSlide.position_y}
+                                    min={0}
+                                    max={100}
+                                    display={`${currentSlide.position_y}%`}
+                                    onChange={(value) => updateSlide("position_y", value)}
+                                  />
+                                </>
+                              )}
+                            </>
+                          );
+                        })()
                       ) : (
                         <>
                           <label className={styles.wideField}>
@@ -3911,8 +4037,8 @@ export default function AdminPage() {
                           </label>
                         </>
                       )}
-                      {(storefront.hero_image_url ||
-                        storefront.hero_images.length > 0) && (
+                      {storefront.hero_image_url &&
+                        storefront.hero_display_mode !== "CAROUSEL" && (
                         <>
                           <RangeField
                             label="Zoom da imagem"
@@ -4875,15 +5001,21 @@ function StorefrontPreview({
   storeName: string;
   config: StorefrontConfig;
 }) {
-  const heroImages = config.hero_images.length
-    ? config.hero_images
-    : config.hero_image_url
-      ? [config.hero_image_url]
-      : [];
+  const heroSlidesPrev: HeroSlide[] = config.hero_slides?.length
+    ? config.hero_slides
+    : config.hero_images.map((url) => ({ image_url: url, scale: 1, position_x: 50, position_y: 50 }));
   const mainImage =
     config.hero_display_mode === "CAROUSEL"
-      ? heroImages[0]
+      ? heroSlidesPrev[0]?.image_url
       : config.hero_image_url;
+  const mainSlideStyle: React.CSSProperties =
+    config.hero_display_mode === "CAROUSEL" && heroSlidesPrev[0]
+      ? {
+          objectFit: "cover",
+          objectPosition: `${heroSlidesPrev[0].position_x}% ${heroSlidesPrev[0].position_y}%`,
+          transform: `scale(${heroSlidesPrev[0].scale})`,
+        }
+      : null!;
   const heroBackground: React.CSSProperties =
     config.hero_bg_type === "IMAGE" && config.hero_bg_image_url
       ? {
@@ -4952,8 +5084,11 @@ function StorefrontPreview({
           className={`${styles.previewHero} ${!config.hero_image_enabled ? styles.previewHeroWithoutImage : ""}`}
           data-mode={config.hero_display_mode}
           data-image-size={config.hero_image_size}
-          style={{ ...heroBackground, minHeight: heroHeight }}
+          style={{ ...heroBackground, minHeight: heroHeight, position: "relative" }}
         >
+          {config.hero_bg_type === "IMAGE" && (config.hero_overlay_opacity ?? 0) > 0 && (
+            <div style={{ position: "absolute", inset: 0, background: "#000", opacity: (config.hero_overlay_opacity ?? 0) / 100, pointerEvents: "none", zIndex: 1 }} />
+          )}
           {config.hero_image_enabled &&
             config.hero_display_mode === "FULLSCREEN" &&
             mainImage && (
@@ -4964,7 +5099,7 @@ function StorefrontPreview({
                 alt=""
               />
             )}
-          <div className={styles.previewHeroCopy}>
+          <div className={styles.previewHeroCopy} style={{ position: "relative", zIndex: 2 }}>
             <em>{config.hero_eyebrow}</em>
             <h3>{config.hero_title}</h3>
             <p>{config.hero_description}</p>
@@ -4975,19 +5110,20 @@ function StorefrontPreview({
               <div
                 className={styles.previewHeroMedia}
                 data-mode={config.hero_display_mode}
+                style={{ position: "relative", zIndex: 2 }}
               >
                 {mainImage ? (
                   <img
                     src={mainImage}
-                    style={imageStyle}
+                    style={config.hero_display_mode === "CAROUSEL" ? mainSlideStyle : imageStyle}
                     alt="Prévia da imagem principal"
                   />
                 ) : (
                   <span>Ilustração padrão</span>
                 )}
                 {config.hero_display_mode === "CAROUSEL" &&
-                  heroImages.length > 1 && (
-                    <small>1 / {heroImages.length}</small>
+                  heroSlidesPrev.length > 1 && (
+                    <small>1 / {heroSlidesPrev.length}</small>
                   )}
               </div>
             )}

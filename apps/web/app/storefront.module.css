@@ -157,13 +157,32 @@
 /* Hero flame mode */
 .heroFlame .heroImage,.heroFlame img{clip-path:polygon(50% 0%,80% 10%,100% 35%,95% 60%,80% 80%,65% 90%,50% 100%,35% 90%,20% 80%,5% 60%,0% 35%,20% 10%);border-radius:0!important}
 
+/* Hero overlay (camada fosca) */
+.heroOverlay{position:absolute;inset:0;background:#000;pointer-events:none;z-index:1}
+
 /* Hero carousel */
-.heroCarousel{position:relative;width:min(420px,42vw);height:420px;flex-shrink:0}
+.heroCarousel{position:relative;width:min(420px,42vw);height:420px;flex-shrink:0;z-index:2}
 .carouselSlide{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:48% 52% 43% 57%/56% 43% 57% 44%;opacity:0;transition:opacity .7s ease;box-shadow:0 25px 60px color-mix(in srgb,var(--store-primary) 28%,transparent)}
 .carouselSlideActive{opacity:1}
 .carouselDots{position:absolute;bottom:-28px;left:50%;transform:translateX(-50%);display:flex;gap:6px}
 .carouselDot,.carouselDotActive{border:0;border-radius:50%;cursor:pointer;padding:0;width:8px;height:8px;background:color-mix(in srgb,var(--store-primary) 25%,transparent)}
 .carouselDotActive{background:var(--store-primary)}
+
+/* Carousel ratio variants */
+.carouselRatioSquare{aspect-ratio:1/1;height:auto}
+.carouselRatioSquare .carouselSlide,.carouselRatioSquare .carouselSlide.carouselSlideActive{border-radius:18px}
+.carouselRatioCircle{aspect-ratio:1/1;height:auto}
+.carouselRatioCircle .carouselSlide,.carouselRatioCircle .carouselSlide.carouselSlideActive{border-radius:50%}
+.carouselRatioPortrait{aspect-ratio:3/4;height:auto}
+.carouselRatioPortrait .carouselSlide,.carouselRatioPortrait .carouselSlide.carouselSlideActive{border-radius:18px}
+.carouselRatioLandscape{aspect-ratio:4/3;height:auto;width:min(520px,50vw)}
+.carouselRatioLandscape .carouselSlide,.carouselRatioLandscape .carouselSlide.carouselSlideActive{border-radius:18px}
+
+/* Carousel position variants */
+.hero[data-carousel-position="LEFT"] .heroCarousel{order:-1}
+.hero[data-carousel-position="BOTTOM"]{grid-template-columns:1fr;justify-items:start}
+.hero[data-carousel-position="BOTTOM"] .heroCarousel{width:100%;max-width:100%;height:clamp(200px,40vw,360px);aspect-ratio:unset;order:1}
+.hero[data-carousel-position="BOTTOM"] .heroCarousel .carouselSlide,.hero[data-carousel-position="BOTTOM"] .heroCarousel .carouselSlide.carouselSlideActive{border-radius:14px}
 
 /* Suggestions section */
 .suggestions{max-width:1420px;margin:0 auto;padding:36px clamp(24px,7vw,110px) 0}

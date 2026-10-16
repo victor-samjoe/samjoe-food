@@ -314,3 +314,86 @@ test('PATCH /v1/admin/categories/:id atualiza a ordem da categoria', async () =>
   assert.equal(res.json().category_id, 'cat-1');
   await app.close();
 });
+
+test('PATCH /v1/admin/stores/:storeSlug aceita hero_slides com enquadramento por imagem', async () => {
+  const slides = [
+    { image_url: 'data:image/webp;base64,QUJD', scale: 1.2, position_x: 30, position_y: 60 },
+    { image_url: 'data:image/webp;base64,REVG', scale: 1,   position_x: 50, position_y: 50 },
+  ];
+  const pool = buildPool({
+    'FROM auth_sessions': [validSession],
+    'UPDATE stores SET': [{
+      store_id: 'store-a', store_slug: 'doce-horizonte-centro', store_name: 'Centro', currency: 'BRL',
+      storefront_config: { hero_slides: slides },
+    }],
+  });
+  const app = buildApp({ pool });
+  const res = await app.inject({
+    method: 'PATCH', url: '/v1/admin/stores/doce-horizonte-centro',
+    headers: { authorization: 'Bearer demo-token-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' },
+    payload: { storefront_config: { hero_slides: slides } },
+  });
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.json().store.storefront_config.hero_slides.length, 2);
+  assert.equal(res.json().store.storefront_config.hero_slides[0].scale, 1.2);
+  assert.equal(res.json().store.storefront_config.hero_slides[0].position_x, 30);
+  await app.close();
+});
+
+test('PATCH /v1/admin/stores/:storeSlug aceita hero_overlay_opacity, hero_carousel_position e hero_carousel_ratio', async () => {
+  const pool = buildPool({
+    'FROM auth_sessions': [validSession],
+    'UPDATE stores SET': [{
+      store_id: 'store-a', store_slug: 'doce-horizonte-centro', store_name: 'Centro', currency: 'BRL',
+      storefront_config: { hero_overlay_opacity: 40, hero_carousel_position: 'LEFT', hero_carousel_ratio: 'SQUARE' },
+    }],
+  });
+  const app = buildApp({ pool });
+  const res = await app.inject({
+    method: 'PATCH', url: '/v1/admin/stores/doce-horizonte-centro',
+    headers: { authorization: 'Bearer demo-token-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' },
+    payload: { storefront_config: { hero_overlay_opacity: 40, hero_carousel_position: 'LEFT', hero_carousel_ratio: 'SQUARE' } },
+  });
+  assert.equal(res.statusCode, 200);
+  const cfg = res.json().store.storefront_config;
+  assert.equal(cfg.hero_overlay_opacity, 40);
+  assert.equal(cfg.hero_carousel_position, 'LEFT');
+  assert.equal(cfg.hero_carousel_ratio, 'SQUARE');
+  await app.close();
+});
+
+test('PATCH /v1/admin/stores/:storeSlug rejeita hero_overlay_opacity acima de 90', async () => {
+  const pool = buildPool({ 'FROM auth_sessions': [validSession] });
+  const app = buildApp({ pool });
+  const res = await app.inject({
+    method: 'PATCH', url: '/v1/admin/stores/doce-horizonte-centro',
+    headers: { authorization: 'Bearer demo-token-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' },
+    payload: { storefront_config: { hero_overlay_opacity: 100 } },
+  });
+  assert.equal(res.statusCode, 400);
+  await app.close();
+});
+
+test('PATCH /v1/admin/stores/:storeSlug rejeita hero_slides com campo ausente', async () => {
+  const pool = buildPool({ 'FROM auth_sessions': [validSession] });
+  const app = buildApp({ pool });
+  const res = await app.inject({
+    method: 'PATCH', url: '/v1/admin/stores/doce-horizonte-centro',
+    headers: { authorization: 'Bearer demo-token-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' },
+    payload: { storefront_config: { hero_slides: [{ image_url: 'https://exemplo.com/img.jpg' }] } },
+  });
+  assert.equal(res.statusCode, 400);
+  await app.close();
+});
+
+test('PATCH /v1/admin/stores/:storeSlug rejeita hero_carousel_position inválido', async () => {
+  const pool = buildPool({ 'FROM auth_sessions': [validSession] });
+  const app = buildApp({ pool });
+  const res = await app.inject({
+    method: 'PATCH', url: '/v1/admin/stores/doce-horizonte-centro',
+    headers: { authorization: 'Bearer demo-token-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' },
+    payload: { storefront_config: { hero_carousel_position: 'CENTER' } },
+  });
+  assert.equal(res.statusCode, 400);
+  await app.close();
+});

@@ -22,10 +22,11 @@ Loja
 20. Revisar o simulador de como ficara na pagina de edição da loja, deve ser exato conforme as configs; - CONCLUÍDO / VALIDADO NO PAINEL DE PRODUÇÃO
 21. Descer a PRÉVIA DA VITRINE junto com a rolagem, para quando formos configurando, tenhamos a visão de como ficará, hoje ele fica em cima trabado, então altero la embaixo o zoom por exemplo e tenho que subir a rolagem pra ver; - CONCLUÍDO / VALIDADO NO PAINEL DE PRODUÇÃO
 22. Validar frete não está calculando corretamente, quando aperto o botão, nada acontece; - CONCLUÍDO / GOOGLE ROUTES V2 VALIDADO EM PRODUÇÃO
-23. Reabrir a padronização dos cards dos produtos: manter imagem, textos, variações e botão Adicionar alinhados, independentemente do tamanho do nome ou da descrição; - IMPLEMENTADO / VALIDADO LOCALMENTE / AGUARDANDO DEPLOY
-24. Adicionar enquadramento não destrutivo para imagens de produtos, permitindo reduzir até 75%, ampliar até 200% e reposicionar horizontal/verticalmente, preservando o arquivo original; - IMPLEMENTADO / VALIDADO LOCALMENTE / AGUARDANDO DEPLOY
-25. Na aba de produtos, adicionar filtro por categoria e organizar visualmente a listagem pela ordem das categorias; - IMPLEMENTADO / VALIDADO LOCALMENTE / AGUARDANDO DEPLOY
-26. Substituir o popup do navegador usado para renomear categorias por formulário/modal integrado à interface do painel; - IMPLEMENTADO / VALIDADO LOCALMENTE / AGUARDANDO DEPLOY
+23. Reabrir a padronização dos cards dos produtos: manter imagem, textos, variações e botão Adicionar alinhados, independentemente do tamanho do nome ou da descrição; - CONCLUÍDO / DEPLOYADO EM 16/10/2026 / TESTES APROVADOS
+24. Adicionar enquadramento não destrutivo para imagens de produtos, permitindo reduzir até 75%, ampliar até 200% e reposicionar horizontal/verticalmente, preservando o arquivo original; - CONCLUÍDO / DEPLOYADO EM 16/10/2026 / TESTES APROVADOS
+25. Na aba de produtos, adicionar filtro por categoria e organizar visualmente a listagem pela ordem das categorias; - CONCLUÍDO / DEPLOYADO EM 16/10/2026 / TESTES APROVADOS
+26. Substituir o popup do navegador usado para renomear categorias por formulário/modal integrado à interface do painel; - CONCLUÍDO / DEPLOYADO EM 16/10/2026 / TESTES APROVADOS
+27. Melhorar função de ajuste da imagem nos produtos, precisamos adaptar a imagem da melhor forma; - IMPLEMENTADO JUNTO COM ADMIN-16 (aguarda deploy) / zoom e ponto focal por slide do carrossel usando o mesmo modelo hero_slides
 
 
 
@@ -43,7 +44,14 @@ Painel Admin
 10. Na parte de produtos, adicione categoria, assim podemos segmentar os produtos cadastrados por tipo; - CONCLUÍDO / VALIDADO NO PAINEL E POR TESTES
 11. Regra nova para isentar fretes de clientes até quilometragem definida, config da loja; - CONCLUÍDO / VALIDADO POR TESTES
 12. Confirme se estamos usando a API para calculo de frete no app; - CONCLUÍDO / GOOGLE ROUTES V2 VALIDADO EM PRODUÇÃO
-13. No Cardápio, manter as mesmas ações para produtos novos e anteriores. O botão Excluir deve permanecer visível; quando o produto já possuir pedidos, fica apagado e desabilitado. Ao passar o mouse ou focar o controle, exibir um tooltip discreto: "Já existem pedidos para este produto. Para removê-lo da visualização, arquive." Produtos sem pedidos podem ser excluídos normalmente; - IMPLEMENTADO / VALIDADO LOCALMENTE / AGUARDANDO DEPLOY
+13. No Cardápio, manter as mesmas ações para produtos novos e anteriores. O botão Excluir deve permanecer visível; quando o produto já possuir pedidos, fica apagado e desabilitado. Ao passar o mouse ou focar o controle, exibir um tooltip discreto: "Já existem pedidos para este produto. Para removê-lo da visualização, arquive." Produtos sem pedidos podem ser excluídos normalmente; - CONCLUÍDO / DEPLOYADO EM 16/10/2026 / TESTES APROVADOS
+14. opçao para Adicione camada fosca na imagem de fundo; - IMPLEMENTADO (aguarda deploy) / controle de opacidade 0–90% no admin quando fundo é IMAGE; overlay aplicado na vitrine
+15. Controle de posição, tamanho e formato do carrossel, podendo ser colocado em qualquer lado da tela; - IMPLEMENTADO (aguarda deploy) / selects LEFT/RIGHT/BOTTOM e BLOB/SQUARE/CIRCLE/PORTRAIT/LANDSCAPE; CSS data-carousel-position aplicado na vitrine
+16. Controle individual de recorte e tamanho da imagem que será usada na apresentação; - IMPLEMENTADO (aguarda deploy) / editor por slide no admin (clicar no thumb seleciona), zoom e posição X/Y individuais; migration 0035 converte hero_images → hero_slides
+17. Rever esse cache curto, acho que vai atrapalhar se deixar um pedido aberto e saída da tela e depois voltar, experiencia do cliente fica sacrificada; - PARCIAL: SINCRONIZAÇÃO ADMIN → VITRINE CORRIGIDA E DEPLOYADA EM 16/10/2026; RETOMADA DE PEDIDO AINDA PENDENTE
+18. Consentimento por padrão deve ser autorizado para tudo, depois mudamos, inclusive, preciso de uma função para alterar consentimento em lote, para os já cadastrados, coloque como true;
+19. Adicionar opção de entraga também como configurável na parte de atendimento do menu minha loja, precisamos ter a opção de desabilitar entregas pela loja;
+20. Adicionar também configuração de definir dias e horários para retirada, é uma configuração para o momento atual da loja que pode ser util. Vamos fazer vendas antecipadas e ter dias específicos para retiradas. Pode ser um flag que ativa seletor de dias específicos com range de horários para retirada;
 
 Link
 
@@ -234,6 +242,7 @@ FASE 6 — TESTES E PUBLICAÇÃO
 - Typecheck, 56 testes de workspace, 4 testes de provisionamento e build aprovados.
 - Migrations 0025 e 0026 aplicadas no Supabase de produção.
 - Worker samjoe-food-web publicado na versão f1d9939d-5b20-4ed6-ab73-87bd19187f3d.
+- Publicação mais recente em 16/10/2026: versão 6ef07744-9d28-4b32-8c06-55090dfda5dc, incluindo Loja 23–26, Admin 13 e sincronização Admin → vitrine.
 - HTTPS, catálogo, admin, master, link limpo e Google Routes v2 aprovados no smoke test.
 
 

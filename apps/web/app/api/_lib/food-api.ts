@@ -22,6 +22,13 @@ async function injectLocalApi(connectionString: string, path: string, request: R
 }
 
 async function cachedCatalog(connectionString: string, path: string, request: Request): Promise<Response> {
+  if (request.headers.get('x-foodapp-fresh') === '1') {
+    const response = await injectLocalApi(connectionString, path, request);
+    const headers = new Headers(response.headers);
+    headers.set('cache-control', 'private, no-cache, no-store, max-age=0');
+    headers.set('x-foodapp-catalog-cache', 'bypass');
+    return new Response(response.body, { status: response.status, headers });
+  }
   const cache = runtimeCache();
   const cacheKey = new Request(request.url, { method: 'GET' });
   const cached = await cache?.match(cacheKey);
