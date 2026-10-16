@@ -33,7 +33,7 @@ async function cachedCatalog(connectionString: string, path: string, request: Re
     const response = await injectLocalApi(connectionString, path, request);
     if (!response.ok) return response;
     const headers = new Headers(response.headers);
-    headers.set('cache-control', 'public, max-age=60, stale-while-revalidate=300');
+    headers.set('cache-control', 'public, max-age=15, stale-while-revalidate=15');
     headers.set('x-foodapp-catalog-cache', 'miss');
     const cacheable = new Response(response.body, { status: response.status, headers });
     await cache?.put(cacheKey, cacheable.clone());
