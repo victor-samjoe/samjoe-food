@@ -61,10 +61,13 @@ type CatalogRow = {
   is_open: boolean;
   is_open_reason: string | null;
   business_hours: Record<string, BusinessHoursDay> | null;
+  delivery_immediate_enabled: boolean | null;
   scheduled_delivery_enabled: boolean | null;
   pickup_in_person_enabled: boolean | null;
   pickup_by_app_enabled: boolean | null;
   pickup_scheduling_enabled: boolean | null;
+  pickup_schedule_enabled: boolean | null;
+  pickup_schedule: Array<{ date: string; from: string; to: string }> | null;
   cash_enabled: boolean | null;
   card_on_site_enabled: boolean | null;
   pix_enabled: boolean | null;
@@ -151,10 +154,13 @@ export function registerCatalogRoutes(app: FastifyInstance, pool: Database) {
         COALESCE(s.is_open, true) AS is_open,
         s.is_open_reason,
         s.business_hours,
+        COALESCE(s.delivery_immediate_enabled, true) AS delivery_immediate_enabled,
         s.scheduled_delivery_enabled,
         s.pickup_in_person_enabled,
         s.pickup_by_app_enabled,
         s.pickup_scheduling_enabled,
+        COALESCE(s.pickup_schedule_enabled, false) AS pickup_schedule_enabled,
+        s.pickup_schedule,
         s.cash_enabled,
         s.card_on_site_enabled,
         s.pix_enabled,
@@ -263,11 +269,13 @@ export function registerCatalogRoutes(app: FastifyInstance, pool: Database) {
         reason_closed: !open_now ? (first.is_open_reason ?? null) : null,
         business_hours: first.business_hours ?? null,
         fulfillment_config: {
-          delivery_enabled: first.delivery_status === 'ACTIVE',
+          delivery_enabled: first.delivery_status === 'ACTIVE' && (first.delivery_immediate_enabled ?? true),
           scheduled_delivery_enabled: first.scheduled_delivery_enabled ?? false,
           pickup_in_person_enabled: first.pickup_in_person_enabled ?? true,
           pickup_by_app_enabled: first.pickup_by_app_enabled ?? false,
           pickup_scheduling_enabled: first.pickup_scheduling_enabled ?? false,
+          pickup_schedule_enabled: first.pickup_schedule_enabled ?? false,
+          pickup_schedule: first.pickup_schedule ?? [],
         },
         payment_config: {
           cash_enabled: first.cash_enabled ?? true,

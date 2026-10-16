@@ -9,7 +9,8 @@ type Product = { id: string; name: string; description: string | null; image_url
 type Category = { id: string | null; name: string | null; slug: string | null; products: Product[] };
 type HeroSlide = { image_url: string; scale: number; position_x: number; position_y: number };
 type StorefrontConfig = { brand_subtitle:string; hero_eyebrow:string; hero_title:string; hero_description:string; whatsapp_phone_e164:string; primary_color:string; accent_color:string; background_color:string; header_background_color:string; brand_name_color:string; brand_subtitle_color:string; hero_eyebrow_color:string; hero_title_color:string; hero_description_color:string; hero_image_enabled:boolean; hero_image_url:string|null; hero_image_size:'SMALL'|'MEDIUM'|'LARGE'; hero_display_mode:'CORNER'|'FULLSCREEN'|'FLAME'|'CAROUSEL'; hero_images:string[]; hero_slides?:HeroSlide[]; hero_section_size:'COMPACT'|'NORMAL'|'TALL'; hero_image_fit:'FILL'|'FIT'; hero_image_scale:number; hero_image_position_x:number; hero_image_position_y:number; logo_url:string|null; font_family:'CLASSIC'|'MODERN'|'ROUNDED'; text_case:'AS_TYPED'|'UPPERCASE'; hero_bg_type?:'GRADIENT'|'COLOR'|'IMAGE'; hero_bg_color?:string|null; hero_bg_image_url?:string|null; hero_bg_image_scale:number; hero_bg_position_x:number; hero_bg_position_y:number; hero_overlay_opacity?:number; hero_carousel_position?:'LEFT'|'RIGHT'|'BOTTOM'; hero_carousel_ratio?:'BLOB'|'SQUARE'|'CIRCLE'|'PORTRAIT'|'LANDSCAPE' };
-type FulfillmentConfig = { delivery_enabled: boolean; scheduled_delivery_enabled: boolean; pickup_in_person_enabled: boolean; pickup_by_app_enabled: boolean; pickup_scheduling_enabled: boolean };
+type PickupSlot = { date: string; from: string; to: string };
+type FulfillmentConfig = { delivery_enabled: boolean; scheduled_delivery_enabled: boolean; pickup_in_person_enabled: boolean; pickup_by_app_enabled: boolean; pickup_scheduling_enabled: boolean; pickup_schedule_enabled?: boolean; pickup_schedule?: PickupSlot[] };
 type PaymentConfig = { cash_enabled: boolean; card_on_site_enabled: boolean; pix_enabled: boolean; mercado_pago_enabled: boolean; pix_key?: string | null };
 type BusinessHoursDay = { open: boolean; from: string | null; to: string | null };
 type Catalog = { store: { name: string; slug: string; timezone: string; storefront:Partial<StorefrontConfig>; delivery_enabled?:boolean; is_open?:boolean; open_now?:boolean; reason_closed?:string|null; fulfillment_config?: FulfillmentConfig; payment_config?: PaymentConfig; business_hours?: Record<string, BusinessHoursDay> | null }; categories: Category[]; version: string };
@@ -842,7 +843,22 @@ function Checkout({ storeSlug, form, updateForm, submitting, onConfirm, onBack, 
     {form.fulfillment === 'DELIVERY_SCHEDULED' && (
       <label>Quando? (agendamento)<input type="datetime-local" required value={form.scheduledFor} onChange={e => updateForm('scheduledFor', e.target.value)} min={new Date(Date.now() + 30*60*1000).toISOString().slice(0,16)} /></label>
     )}
-    {form.fulfillment === 'PICKUP' && fulfillmentConfig?.pickup_scheduling_enabled && (() => {
+    {form.fulfillment === 'PICKUP' && (fulfillmentConfig?.pickup_schedule_enabled) && fulfillmentConfig.pickup_schedule && fulfillmentConfig.pickup_schedule.length > 0 && (() => {
+      const slots = fulfillmentConfig.pickup_schedule!;
+      const selDate = form.scheduledFor.length >= 10 ? form.scheduledFor.slice(0, 10) : '';
+      const selSlot = slots.find(s => s.date === selDate);
+      return <>
+        <label>Dia de retirada<select required value={selDate} onChange={e => {
+          const slot = slots.find(s => s.date === e.target.value);
+          updateForm('scheduledFor', slot ? `${slot.date}T${slot.from}` : '');
+        }}>
+          <option value="">Selecione um dia</option>
+          {slots.map(s => <option key={s.date} value={s.date}>{new Intl.DateTimeFormat('pt-BR', { weekday: 'long', day: '2-digit', month: 'long' }).format(new Date(s.date + 'T12:00:00'))}</option>)}
+        </select></label>
+        {selSlot && <label>Horário de retirada<input type="time" required min={selSlot.from} max={selSlot.to} value={form.scheduledFor.length >= 16 ? form.scheduledFor.slice(11, 16) : selSlot.from} onChange={e => updateForm('scheduledFor', `${selDate}T${e.target.value}`)} /></label>}
+      </>;
+    })()}
+    {form.fulfillment === 'PICKUP' && fulfillmentConfig?.pickup_scheduling_enabled && !fulfillmentConfig?.pickup_schedule_enabled && (() => {
       const tz = storeTimezone ?? 'America/Sao_Paulo';
       const slots = getPickupTimeSlots(businessHours, tz);
       if (slots.length === 0) return <p className={styles.checkoutHint}>Sem horários de retirada disponíveis no momento.</p>;

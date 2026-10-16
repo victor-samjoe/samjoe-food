@@ -50,8 +50,8 @@ Painel Admin
 16. Controle individual de recorte e tamanho da imagem que será usada na apresentação; - IMPLEMENTADO (aguarda deploy) / editor por slide no admin (clicar no thumb seleciona), zoom e posição X/Y individuais; migration 0035 converte hero_images → hero_slides
 17. Rever esse cache curto, acho que vai atrapalhar se deixar um pedido aberto e saída da tela e depois voltar, experiencia do cliente fica sacrificada; - PARCIAL: SINCRONIZAÇÃO ADMIN → VITRINE CORRIGIDA E DEPLOYADA EM 16/10/2026; RETOMADA DE PEDIDO AINDA PENDENTE
 18. Consentimento por padrão deve ser autorizado para tudo, depois mudamos, inclusive, preciso de uma função para alterar consentimento em lote, para os já cadastrados, coloque como true;
-19. Adicionar opção de entraga também como configurável na parte de atendimento do menu minha loja, precisamos ter a opção de desabilitar entregas pela loja;
-20. Adicionar também configuração de definir dias e horários para retirada, é uma configuração para o momento atual da loja que pode ser util. Vamos fazer vendas antecipadas e ter dias específicos para retiradas. Pode ser um flag que ativa seletor de dias específicos com range de horários para retirada;
+19. Adicionar opção de entraga também como configurável na parte de atendimento do menu minha loja, precisamos ter a opção de desabilitar entregas pela loja; - CONCLUÍDO / PUBLICADO EM 16/10/2026
+20. Adicionar também configuração de definir dias e horários para retirada, é uma configuração para o momento atual da loja que pode ser util. Vamos fazer vendas antecipadas e ter dias específicos para retiradas. Pode ser um flag que ativa seletor de dias específicos com range de horários para retirada; - CONCLUÍDO / PUBLICADO EM 16/10/2026
 
 Link
 

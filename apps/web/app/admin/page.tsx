@@ -167,10 +167,13 @@ type Store = {
   is_open?: boolean;
   is_open_reason?: string | null;
   business_hours?: Record<string, BusinessHoursDay> | null;
+  delivery_immediate_enabled?: boolean;
   scheduled_delivery_enabled?: boolean;
   pickup_in_person_enabled?: boolean;
   pickup_by_app_enabled?: boolean;
   pickup_scheduling_enabled?: boolean;
+  pickup_schedule_enabled?: boolean;
+  pickup_schedule?: Array<{ date: string; from: string; to: string }> | null;
   cash_enabled?: boolean;
   card_on_site_enabled?: boolean;
   pix_enabled?: boolean;
@@ -410,11 +413,14 @@ export default function AdminPage() {
   const [storeNameDraft, setStoreNameDraft] = useState("");
   const [address, setAddress] = useState<Address>(emptyAddress);
   const [fulfillmentConfig, setFulfillmentConfig] = useState({
+    delivery_immediate_enabled: true,
     scheduled_delivery_enabled: false,
     pickup_in_person_enabled: true,
     pickup_by_app_enabled: false,
     pickup_scheduling_enabled: false,
+    pickup_schedule_enabled: false,
   });
+  const [pickupSchedule, setPickupSchedule] = useState<Array<{ date: string; from: string; to: string }>>([]);
   const [paymentConfig, setPaymentConfig] = useState({
     cash_enabled: true,
     card_on_site_enabled: false,
@@ -673,11 +679,14 @@ export default function AdminPage() {
           ...(storeData.store.storefront_config ?? {}),
         });
         setFulfillmentConfig({
+          delivery_immediate_enabled: storeData.store.delivery_immediate_enabled ?? true,
           scheduled_delivery_enabled: storeData.store.scheduled_delivery_enabled ?? false,
           pickup_in_person_enabled: storeData.store.pickup_in_person_enabled ?? true,
           pickup_by_app_enabled: storeData.store.pickup_by_app_enabled ?? false,
           pickup_scheduling_enabled: storeData.store.pickup_scheduling_enabled ?? false,
+          pickup_schedule_enabled: storeData.store.pickup_schedule_enabled ?? false,
         });
+        setPickupSchedule(storeData.store.pickup_schedule ?? []);
         setPaymentConfig({
           cash_enabled: storeData.store.cash_enabled ?? true,
           card_on_site_enabled: storeData.store.card_on_site_enabled ?? false,
@@ -1370,6 +1379,7 @@ export default function AdminPage() {
               hero_image_url: storefront.hero_image_url?.trim() || null,
             },
             ...fulfillmentConfig,
+            pickup_schedule: fulfillmentConfig.pickup_schedule_enabled ? pickupSchedule : null,
             ...paymentConfig,
             pix_key: pixKey.trim() || null,
           }),
@@ -4146,6 +4156,7 @@ export default function AdminPage() {
                   <div className={styles.formGrid}>
                     {(
                       [
+                        { key: "delivery_immediate_enabled" as const, label: "Entrega imediata", description: "Habilita ou pausa entrega imediata (não afeta a configuração de frete)" },
                         { key: "scheduled_delivery_enabled" as const, label: "Entrega agendada", description: "Cliente escolhe data e hora para receber" },
                         { key: "pickup_in_person_enabled" as const, label: "Retirada no local", description: "Cliente retira pessoalmente na loja" },
                         { key: "pickup_by_app_enabled" as const, label: "Retirada via app (motoboy iFood/Rappi)", description: "Motoboy de aplicativo busca na loja" },
@@ -4170,9 +4181,66 @@ export default function AdminPage() {
                         </span>
                       </label>
                     ))}
-                    <p style={{ gridColumn: "1 / -1", margin: 0, opacity: 0.6, fontSize: "0.85rem" }}>
-                      Entrega imediata é gerenciada automaticamente pelo endereço de saída e regra de frete.
-                    </p>
+                    <label style={{ gridColumn: "1 / -1", display: "flex", alignItems: "center", gap: "0.75rem", cursor: "pointer" }}>
+                      <input
+                        type="checkbox"
+                        checked={fulfillmentConfig.pickup_schedule_enabled}
+                        onChange={(e) =>
+                          setFulfillmentConfig((current) => ({
+                            ...current,
+                            pickup_schedule_enabled: e.target.checked,
+                          }))
+                        }
+                      />
+                      <span>
+                        <strong>Dias específicos de retirada</strong>
+                        <br />
+                        <small style={{ opacity: 0.65 }}>Ativa seletor de data e horário para o cliente ao escolher retirada</small>
+                      </span>
+                    </label>
+                    {fulfillmentConfig.pickup_schedule_enabled && (
+                      <div style={{ gridColumn: "1 / -1", display: "grid", gap: "8px" }}>
+                        {pickupSchedule.map((entry, i) => (
+                          <div key={i} style={{ display: "grid", gridTemplateColumns: "1fr auto auto auto", gap: "8px", alignItems: "center", padding: "8px", border: "1px solid #e0d8d1", borderRadius: "8px", background: "#faf7f4" }}>
+                            <input
+                              type="date"
+                              value={entry.date}
+                              onChange={(e) => setPickupSchedule((s) => s.map((x, j) => j === i ? { ...x, date: e.target.value } : x))}
+                              style={{ border: "1px solid #d3c8c0", borderRadius: "7px", padding: "7px 9px", font: "inherit", fontSize: "13px" }}
+                            />
+                            <input
+                              type="time"
+                              value={entry.from}
+                              onChange={(e) => setPickupSchedule((s) => s.map((x, j) => j === i ? { ...x, from: e.target.value } : x))}
+                              style={{ border: "1px solid #d3c8c0", borderRadius: "7px", padding: "7px 9px", font: "inherit", fontSize: "13px" }}
+                            />
+                            <input
+                              type="time"
+                              value={entry.to}
+                              onChange={(e) => setPickupSchedule((s) => s.map((x, j) => j === i ? { ...x, to: e.target.value } : x))}
+                              style={{ border: "1px solid #d3c8c0", borderRadius: "7px", padding: "7px 9px", font: "inherit", fontSize: "13px" }}
+                            />
+                            <button
+                              type="button"
+                              onClick={() => setPickupSchedule((s) => s.filter((_, j) => j !== i))}
+                              style={{ border: "1px solid #e5c2c0", borderRadius: "7px", background: "#fdf0ee", color: "#a9483e", padding: "7px 10px", cursor: "pointer", fontWeight: 800 }}
+                            >
+                              ×
+                            </button>
+                          </div>
+                        ))}
+                        <button
+                          type="button"
+                          onClick={() => setPickupSchedule((s) => [...s, { date: "", from: "08:00", to: "18:00" }])}
+                          style={{ border: "1px dashed #d3c8c0", borderRadius: "8px", background: "transparent", color: "#a9483e", padding: "9px", cursor: "pointer", fontWeight: 800, fontSize: "13px" }}
+                        >
+                          + Adicionar dia de retirada
+                        </button>
+                        {pickupSchedule.length === 0 && (
+                          <small style={{ color: "#9a8276", fontSize: "11px" }}>Nenhum dia configurado — adicione pelo menos um para ativar o seletor na loja.</small>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </Panel>
                 <Panel
