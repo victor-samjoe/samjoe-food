@@ -10,6 +10,7 @@ const stores = {
     timezone: 'America/Sao_Paulo', delivery_status: 'ACTIVE',
     category_id: 'cat-a', category_name: 'Bolos no pote', category_slug: 'bolos-no-pote', category_sort_order: 1,
     product_id: 'product-a', product_name: 'Bolo Aurora', description: null,
+    cover_image_scale: '1.35', cover_image_position_x: 25, cover_image_position_y: 75,
     variant_id: 'variant-a', sku: 'A-1', variant_name: '250 ml', price_cents: 1200, currency: 'BRL',
     inventory_policy: 'UNLIMITED', preorder_limit: 0, stock_available: 0,
   }],
@@ -61,8 +62,39 @@ test('catálogo agrupa produtos por categoria', async () => {
   assert.ok(Array.isArray(cat.products));
   const product = cat.products[0];
   assert.equal(product.name, 'Bolo Aurora');
+  assert.equal(product.image_scale, 1.35);
+  assert.equal(product.image_position_x, 25);
+  assert.equal(product.image_position_y, 75);
   assert.ok(Array.isArray(product.variants));
   assert.equal(product.variants[0].available, true);
+  await app.close();
+});
+
+test('catálogo troca imagens Base64 por URLs de mídia cacheáveis', async () => {
+  const image = 'data:image/webp;base64,QUJDRA==';
+  const mediaPool: TransactionalDatabase = {
+    async query<T extends QueryResultRow>(_sql: string, values?: unknown[]): Promise<{ rows: T[] }> {
+      if (!values) return { rows: [{ '?column?': 1 } as unknown as T] };
+      return {
+        rows: [{
+          ...stores['doce-horizonte-centro'][0],
+          storefront_config: { logo_url: image, hero_image_url: image, hero_images: [image] },
+          store_updated_at: '2026-10-16T12:00:00.000Z',
+          cover_image_url: image,
+          product_updated_at: '2026-10-16T12:01:00.000Z',
+        } as unknown as T],
+      };
+    },
+    async transaction<T>(operation: (database: Database) => Promise<T>): Promise<T> { return operation(mediaPool); },
+  };
+  const app = buildApp({ pool: mediaPool });
+  const res = await app.inject({ method: 'GET', url: '/v1/public/stores/doce-horizonte-centro/catalog' });
+  assert.equal(res.statusCode, 200);
+  const body = res.json();
+  assert.doesNotMatch(res.body, /data:image/);
+  assert.match(body.store.storefront.logo_url, /\/api\/store\/doce-horizonte-centro\/media\/storefront\/logo_url\?v=/);
+  assert.match(body.store.storefront.hero_images[0], /\/api\/store\/doce-horizonte-centro\/media\/storefront\/hero_images\/0\?v=/);
+  assert.match(body.categories[0].products[0].image_url, /\/api\/store\/doce-horizonte-centro\/media\/products\/product-a\?v=/);
   await app.close();
 });
 

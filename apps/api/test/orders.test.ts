@@ -46,6 +46,7 @@ test('GET /v1/admin/stores/:storeSlug/orders retorna lista paginada', async () =
       order_id: 'ord-1', public_number: 'DEMO-ABC', status: 'NEW',
       customer_name: 'João', total_cents: 2400, currency: 'BRL',
       fulfillment: 'DELIVERY', placed_at: '2026-10-10T12:00:00Z', total: 1,
+      payment_method: 'PIX', payment_status: 'PAID',
     }],
   });
   const app = buildApp({ pool });
@@ -57,6 +58,7 @@ test('GET /v1/admin/stores/:storeSlug/orders retorna lista paginada', async () =
   const body = res.json();
   assert.ok(Array.isArray(body.orders));
   assert.equal(body.orders[0].order_id, 'ord-1');
+  assert.equal(body.orders[0].payment_status, 'PAID');
   await app.close();
 });
 
@@ -135,5 +137,22 @@ test('POST transição CANCELLED libera reservas de inventário', async () => {
   });
   assert.equal(res.statusCode, 200);
   assert.deepEqual(releasedVariants, ['var-1']);
+  await app.close();
+});
+
+test('POST transição CANCELLED bloqueia pedido com pagamento confirmado', async () => {
+  const pool = buildPool({
+    'FROM auth_sessions': [validSession],
+    'FROM orders WHERE id': [{ order_id: 'ord-1', status: 'NEW', tenant_id: 'tenant-a' }],
+    'SELECT status FROM payments': [{ status: 'PAID' }],
+  });
+  const app = buildApp({ pool });
+  const res = await app.inject({
+    method: 'POST', url: '/v1/admin/orders/ord-1/transitions',
+    headers: { authorization: 'Bearer demo-token-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' },
+    payload: { to: 'CANCELLED' },
+  });
+  assert.equal(res.statusCode, 409);
+  assert.equal(res.json().error.code, 'paid_order_requires_refund');
   await app.close();
 });

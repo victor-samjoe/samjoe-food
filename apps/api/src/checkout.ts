@@ -2,6 +2,7 @@ import { createHash, createHmac, randomUUID } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import type { Database, TransactionalDatabase } from './catalog.js';
 import { HttpError } from './errors.js';
+import { getSalesEngineConfig, dispatchSalesEngineEvent } from './sales-engine-webhook.js';
 import { resolveDistance, postalCodeDistance } from './services/routing.js';
 
 type Address = {
@@ -21,7 +22,7 @@ type OrderBody = {
 };
 type StoreParams = { storeSlug: string };
 type StoreRow = {
-  tenant_id: string; store_id: string; currency: string;
+  tenant_id: string; store_id: string; store_slug: string; currency: string;
   delivery_status: 'PENDING' | 'ACTIVE';
   scheduled_delivery_enabled: boolean;
   pickup_in_person_enabled: boolean;
@@ -66,13 +67,14 @@ function trackingToken(orderId: string): string {
   return createHmac('sha256', secret).update(orderId).digest('base64url');
 }
 
+
 function orderResponse(order: Record<string, unknown>, orderId: string) {
   return { ...order, tracking_token: trackingToken(orderId) };
 }
 
 async function resolveStore(database: Database, slug: string): Promise<StoreRow> {
   const { rows } = await database.query<StoreRow>(`
-    SELECT tenant_id, id AS store_id, currency, delivery_status,
+    SELECT tenant_id, id AS store_id, slug AS store_slug, currency, delivery_status,
       scheduled_delivery_enabled, pickup_in_person_enabled, pickup_by_app_enabled,
       cash_enabled, card_on_site_enabled, pix_enabled, mercado_pago_enabled
     FROM stores WHERE slug = $1 AND status = 'ACTIVE'
@@ -157,6 +159,23 @@ export function registerCheckoutRoutes(app: FastifyInstance, database: Transacti
       if (!key || key.length < 16 || key.length > 200) throw new HttpError(400, 'invalid_idempotency_key', 'Idempotency-Key deve ter entre 16 e 200 caracteres.');
       const requestHash = createHash('sha256').update(request.params.storeSlug + ':' + JSON.stringify(request.body)).digest('hex');
       const response = await database.transaction(async (tx) => createOrder(tx, request.params.storeSlug, key, requestHash, request.body));
+      if (!response.replayed) {
+        // Cloudflare can terminate unawaited work as soon as the response is sent.
+        // Await the notification, but never fail an already-created order because an integration is offline.
+        try {
+          const cfg = await getSalesEngineConfig(database, response.tenantId);
+          if (cfg) {
+            await dispatchSalesEngineEvent(cfg, {
+              event_type: 'order.created',
+              tenantId: response.tenantId,
+              customer: { external_id: response.customerId, phone: request.body.customer.phone_e164, name: request.body.customer.name },
+              order: { external_id: response.orderId, ref: response.publicNumber, total_cents: response.totalCents, fulfillment: response.fulfillment, ...(response.deliveryAddress ? { delivery_address: response.deliveryAddress } : {}), items: response.orderItems },
+            });
+          }
+        } catch (error) {
+          console.error(JSON.stringify({ type: 'sales_engine_dispatch_failed', eventType: 'order.created', reason: (error as Error).message }));
+        }
+      }
       return reply.status(response.replayed ? 200 : 201).send(response.body);
     },
   );
@@ -171,7 +190,7 @@ async function createOrder(database: Database, storeSlug: string, key: string, r
   `, [store.tenant_id, key]);
   if (existing.rows[0]) {
     if (existing.rows[0].request_hash !== requestHash) throw new HttpError(409, 'idempotency_conflict', 'Chave idempotente reutilizada com conteúdo diferente.');
-    return { replayed: true, body: orderResponse(existing.rows[0].response_body, existing.rows[0].resource_id) };
+    return { replayed: true as const, body: orderResponse(existing.rows[0].response_body, existing.rows[0].resource_id), tenantId: store.tenant_id, customerId: '', orderId: existing.rows[0].resource_id, publicNumber: '', totalCents: 0 };
   }
 
   // Validate fulfillment type is enabled for this store
@@ -246,7 +265,12 @@ async function createOrder(database: Database, storeSlug: string, key: string, r
     RETURNING id
   `, [customerId, store.tenant_id, body.customer.name, body.customer.phone_e164, body.customer.email ?? null]);
   const status = (body.payment_method === 'CASH' || body.payment_method === 'CARD') ? 'NEW' : 'PAYMENT_PENDING';
-  const publicNumber = `DEMO-${orderId.replaceAll('-', '').slice(0, 8).toUpperCase()}`;
+  const { rows: counterRows } = await database.query<{ order_counter: number }>(
+    `UPDATE stores SET order_counter = order_counter + 1 WHERE id = $1 AND tenant_id = $2 RETURNING order_counter`,
+    [store.store_id, store.tenant_id],
+  );
+  const seq = counterRows[0]?.order_counter ?? 1;
+  const publicNumber = `#S${String(seq).padStart(3, '0')}`;
   const total = subtotal + deliveryFeeCents;
   await database.query(`
     INSERT INTO orders (id,tenant_id,store_id,customer_id,delivery_quote_id,public_number,tracking_token_hash,source,fulfillment,status,customer_snapshot,address_snapshot,subtotal_cents,delivery_fee_cents,total_cents,currency,notes,scheduled_for)
@@ -267,10 +291,11 @@ async function createOrder(database: Database, storeSlug: string, key: string, r
         RETURNING variant_id
       `, [item.quantity, store.tenant_id, variantId]);
       if (!reserved.rows[0]) throw new HttpError(409, 'insufficient_stock', `Estoque insuficiente para ${variant.sku}.`);
+      const reservationMinutes = body.payment_method === 'PIX' ? 30 : 15;
       await database.query(`
         INSERT INTO inventory_reservations (tenant_id,variant_id,order_id,quantity,status,expires_at)
-        VALUES ($1,$2,$3,$4,'ACTIVE',now() + interval '15 minutes')
-      `, [store.tenant_id, variantId, orderId, item.quantity]);
+        VALUES ($1,$2,$3,$4,'ACTIVE',now() + ($5 * interval '1 minute'))
+      `, [store.tenant_id, variantId, orderId, item.quantity, reservationMinutes]);
     }
     await database.query(`
       INSERT INTO order_items (tenant_id,order_id,variant_id,sku_snapshot,name_snapshot,attributes_snapshot,quantity,unit_price_cents,line_total_cents,notes)
@@ -283,10 +308,13 @@ async function createOrder(database: Database, storeSlug: string, key: string, r
     [store.tenant_id, orderId, body.payment_method === 'MERCADO_PAGO' ? 'fake_mercado_pago' : 'internal_simulator', body.payment_method, total, store.currency]);
   await database.query(`INSERT INTO integration_outbox (tenant_id,event_type,aggregate_type,aggregate_id,payload) VALUES ($1,'foodapp.order.created.v1','order',$2,$3::jsonb)`,
     [store.tenant_id, orderId, JSON.stringify({ order_id: orderId, public_number: publicNumber, status, currency: store.currency, total_cents: total })]);
-  const storedResponse = { id: orderId, public_number: publicNumber, status, items: variantIds.map((id) => ({ variant_id: id, quantity: aggregated.get(id)!.quantity })),
+  const storedResponse = { id: orderId, public_number: publicNumber, status, payment_method: body.payment_method, items: variantIds.map((id) => ({ variant_id: id, quantity: aggregated.get(id)!.quantity })),
     subtotal: { amount_cents: subtotal, currency: store.currency }, delivery_fee: { amount_cents: deliveryFeeCents, currency: store.currency }, total: { amount_cents: total, currency: store.currency } };
   await database.query(`INSERT INTO idempotency_keys (tenant_id,scope,key,request_hash,response_status,response_body,resource_id,expires_at) VALUES ($1,'create_order',$2,$3,201,$4::jsonb,$5,now()+interval '24 hours')`,
     [store.tenant_id, key, requestHash, JSON.stringify(storedResponse), orderId]);
-  return { replayed: false, body: orderResponse(storedResponse, orderId) };
+  const orderItems = variantIds.map(id => ({ name: variants.get(id)!.name, quantity: aggregated.get(id)!.quantity, unit_price_cents: variants.get(id)!.price_cents }));
+  const a = body.address;
+  const deliveryAddress = a ? [a.street + ', ' + a.number, a.complement, a.district, a.city + '-' + a.state].filter(Boolean).join(', ') : undefined;
+  return { replayed: false, body: orderResponse(storedResponse, orderId), tenantId: store.tenant_id, customerId: customer.rows[0]!.id, orderId, publicNumber, totalCents: total, fulfillment: body.fulfillment, deliveryAddress, orderItems };
 }
 

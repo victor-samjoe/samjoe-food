@@ -12,10 +12,17 @@ export default defineConfig({
       "lojas.samjoe.com.br",
     ],
     assets: { notFoundHandling: "none" },
+    limits: {
+      cpuMs: 1_000,
+      subrequests: 100,
+    },
     env: {
       ASSETS: bindings.assets(),
       HYPERDRIVE: bindings.hyperdrive({
         id: "803d550b5efa4df2b0c303d0b524cae9",
+      }),
+      SALES_ENGINE: bindings.worker({
+        worker: "samjoe-sales-engine",
       }),
     },
   }),

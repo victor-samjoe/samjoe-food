@@ -1,9 +1,51 @@
-import { injectApiRequest } from '@foodapp/api/serverless';
 import { env as cloudflareEnv } from 'cloudflare:workers';
 
 const EXTERNAL_API = process.env.API_INTERNAL_URL
   ?? process.env.NEXT_PUBLIC_API_URL
   ?? 'http://127.0.0.1:3001';
+
+type CacheLike = {
+  match(request: Request): Promise<Response | undefined>;
+  put(request: Request, response: Response): Promise<void>;
+};
+
+const catalogRequests = new Map<string, Promise<Response>>();
+
+function runtimeCache(): CacheLike | undefined {
+  return (globalThis as typeof globalThis & { caches?: { default?: CacheLike } }).caches?.default;
+}
+
+async function injectLocalApi(connectionString: string, path: string, request: Request): Promise<Response> {
+  const { injectApiRequest } = await import('@foodapp/api/serverless');
+  return injectApiRequest({ connectionString, path, request });
+}
+
+async function cachedCatalog(connectionString: string, path: string, request: Request): Promise<Response> {
+  const cache = runtimeCache();
+  const cacheKey = new Request(request.url, { method: 'GET' });
+  const cached = await cache?.match(cacheKey);
+  if (cached) return cached;
+
+  const existing = catalogRequests.get(path);
+  if (existing) return (await existing).clone();
+
+  const pending = (async () => {
+    const response = await injectLocalApi(connectionString, path, request);
+    if (!response.ok) return response;
+    const headers = new Headers(response.headers);
+    headers.set('cache-control', 'public, max-age=60, stale-while-revalidate=300');
+    headers.set('x-foodapp-catalog-cache', 'miss');
+    const cacheable = new Response(response.body, { status: response.status, headers });
+    await cache?.put(cacheKey, cacheable.clone());
+    return cacheable;
+  })();
+  catalogRequests.set(path, pending);
+  try {
+    return (await pending).clone();
+  } finally {
+    catalogRequests.delete(path);
+  }
+}
 
 export async function forwardFoodApi(request: Request, path: string) {
   let connectionString = process.env.DATABASE_URL;
@@ -21,7 +63,10 @@ export async function forwardFoodApi(request: Request, path: string) {
         : undefined;
   }
   if (connectionString) {
-    return injectApiRequest({ connectionString, path, request });
+    if (request.method === 'GET' && path.endsWith('/catalog')) {
+      return cachedCatalog(connectionString, path, request);
+    }
+    return injectLocalApi(connectionString, path, request);
   }
 
   const sourceUrl = new URL(request.url);

@@ -6,22 +6,26 @@ Loja
 4. Como o usuário vai acessar pelo celular, geralmente whatsapp, se houver uma forma de já puxar o numero do usuário e já deixar os dados pré-carregados enquanto ele olha os itens, melhoramos a experiencia e falicita o processo, se ele quiser mudar ele só altera o telefone e ta tudo certo; - CONCLUIDO
 5. Ao atualizar a tela, ele passa rapidamente pelo modelo padrão de teste com nomes e imagens diferentes.. não pode, tem que ser 100% tela da loja ou tela branca; - CONCLUIDO
 6. Na loja, o tooltip de carrinho ficou com alguns problemas, podemos deixar ele mais largo e com barra de rolagem para evitar problemas na visualização. Quando avançamos nos dados da entrega, ele deixa um pequeno bloco em cima com setas para vermos o pedido, mas ele fica muito pequeno e não aparece; - CONCLUÍDO / VALIDADO PÓS-DEPLOY
-7. Vamos remover as informações de ambiente demonstrativo e etc; - IMPLEMENTADO / AGUARDANDO VALIDAÇÃO VISUAL
+7. Vamos remover as informações de ambiente demonstrativo e etc; - CONCLUÍDO / VALIDADO EM PRODUÇÃO
 8. No appa visão não esta muito boa.. precisamos deixar os produtos em formato de lista, e o carrossel ficou ruim também.. Vamos reduzir a parte superior para visualização no celular; - CONCLUÍDO / VALIDADO EM 360, 390 E 430 PX
-9. A parte de Cardapio digital tem um texto escrito escolhe o seu momento doce, remova; - IMPLEMENTADO / AGUARDANDO VALIDAÇÃO VISUAL
-10. a cor do local onde fica o logo precisa de um editor de cor também; - IMPLEMENTADO / AGUARDANDO VALIDAÇÃO VISUAL
+9. A parte de Cardapio digital tem um texto escrito escolhe o seu momento doce, remova; - CONCLUÍDO / VALIDADO EM PRODUÇÃO
+10. a cor do local onde fica o logo precisa de um editor de cor também; - CONCLUÍDO / VALIDADO NO PAINEL E NA LOJA
 11. Aumenta o tamanho do logo na pagina da loja; - CONCLUÍDO / VALIDADO PÓS-DEPLOY
-12. Na usabilidade do app, quando acessamos a parte de preenchimento de endereço de entrega, o site automaticamente da zoom na pagina, não pode, deixe no tamanho que preenche a tela; - IMPLEMENTADO / AGUARDANDO VALIDAÇÃO MOBILE
-13. Adicionar opção para alteração das cores de cada texto que pode ser inserido; - IMPLEMENTADO / AGUARDANDO VALIDAÇÃO VISUAL
+12. Na usabilidade do app, quando acessamos a parte de preenchimento de endereço de entrega, o site automaticamente da zoom na pagina, não pode, deixe no tamanho que preenche a tela; - CONCLUÍDO / VALIDADO EM 360 E 390 PX
+13. Adicionar opção para alteração das cores de cada texto que pode ser inserido; - CONCLUÍDO / VALIDADO NO PAINEL E NA PRÉVIA
 14. Travar os cards de pedidos na mesma padronização de tamanho, independente de texto maior ou menor. No caso temos dois produtos com textos diferentes, e o botão de Adicionar acaba ficando em posições diferentes; - CONCLUÍDO / VALIDADO PÓS-DEPLOY
-15. Em baixo ta escrito "SamJoE · tecnologia SamJoE Food" tire; - IMPLEMENTADO / AGUARDANDO VALIDAÇÃO VISUAL
+15. Em baixo ta escrito "SamJoE · tecnologia SamJoE Food" tire; - CONCLUÍDO / VALIDADO EM PRODUÇÃO
 16. Quando clicamos sobre o adicionar, ele abre o checkout, mas não tem opção para continuar comprando, coloque em cima do botão de continuar pedido, no mesmo formato em cor diferente; - CONCLUÍDO / VALIDADO PÓS-DEPLOY
 17. Adicione chamada para a API de localizar endereço no checkout, o usuário digita o cep e pode buscar automaticamente o endereço, deixando apenas o numero e complemento pendente para preenchimento obrigatório; - CONCLUÍDO / API DE CEP VALIDADA EM PRODUÇÃO
 18. Ao preencher telefone, se já houver o usuário cadastrado, trazer o endereço tambem junto com o nome; - CONCLUÍDO (JÁ IMPLEMENTADO E AUDITADO)
-19. Não permitir entrega com endereço errado ou incompleto; - IMPLEMENTADO / AGUARDANDO VALIDAÇÃO MOBILE
-20. Revisar o simulador de como ficara na pagina de edição da loja, deve ser exato conforme as configs; - IMPLEMENTADO / AGUARDANDO VALIDAÇÃO VISUAL
-21. Descer a PRÉVIA DA VITRINE junto com a rolagem, para quando formos configurando, tenhamos a visão de como ficará, hoje ele fica em cima trabado, então altero la embaixo o zoom por exemplo e tenho que subir a rolagem pra ver; - IMPLEMENTADO / AGUARDANDO VALIDAÇÃO VISUAL
+19. Não permitir entrega com endereço errado ou incompleto; - CONCLUÍDO / VALIDADO NO CHECKOUT MOBILE
+20. Revisar o simulador de como ficara na pagina de edição da loja, deve ser exato conforme as configs; - CONCLUÍDO / VALIDADO NO PAINEL DE PRODUÇÃO
+21. Descer a PRÉVIA DA VITRINE junto com a rolagem, para quando formos configurando, tenhamos a visão de como ficará, hoje ele fica em cima trabado, então altero la embaixo o zoom por exemplo e tenho que subir a rolagem pra ver; - CONCLUÍDO / VALIDADO NO PAINEL DE PRODUÇÃO
 22. Validar frete não está calculando corretamente, quando aperto o botão, nada acontece; - CONCLUÍDO / GOOGLE ROUTES V2 VALIDADO EM PRODUÇÃO
+23. Reabrir a padronização dos cards dos produtos: manter imagem, textos, variações e botão Adicionar alinhados, independentemente do tamanho do nome ou da descrição; - IMPLEMENTADO / VALIDADO LOCALMENTE / AGUARDANDO DEPLOY
+24. Adicionar enquadramento não destrutivo para imagens de produtos, permitindo reduzir até 75%, ampliar até 200% e reposicionar horizontal/verticalmente, preservando o arquivo original; - IMPLEMENTADO / VALIDADO LOCALMENTE / AGUARDANDO DEPLOY
+25. Na aba de produtos, adicionar filtro por categoria e organizar visualmente a listagem pela ordem das categorias; - IMPLEMENTADO / VALIDADO LOCALMENTE / AGUARDANDO DEPLOY
+26. Substituir o popup do navegador usado para renomear categorias por formulário/modal integrado à interface do painel; - IMPLEMENTADO / VALIDADO LOCALMENTE / AGUARDANDO DEPLOY
 
 
 
@@ -34,12 +38,12 @@ Painel Admin
 5. Adicionar função de arquivar produtos, não podemos excluir porque se houver venda, o registro precisa continuar la para analises; - CONCLUIDO
 6. Mantenha as funções de pausar e ativar, crie também um filtro para habilitar visualização de arquivados; - CONCLUIDO
 7. Na imagem de fundo onde ficam o carrossel, temos que poder alterar essa imagem também, por cor fixa ou cor do fundo ou imagem específica; - CONCLUIDO
-8. Adicionar opção de anexar imagem do pc no Fundo do bloco de destaque; - IMPLEMENTADO / AGUARDANDO VALIDAÇÃO VISUAL
-9. Função de dar zoom ou reposicionar as imagens anexadas, assim podemos personalizar como a imagem será exibida; - IMPLEMENTADO / AGUARDANDO VALIDAÇÃO VISUAL
-10. Na parte de produtos, adicione categoria, assim podemos segmentar os produtos cadastrados por tipo; - IMPLEMENTADO / AGUARDANDO VALIDAÇÃO VISUAL
+8. Adicionar opção de anexar imagem do pc no Fundo do bloco de destaque; - CONCLUÍDO / VALIDADO NO PAINEL DE PRODUÇÃO
+9. Função de dar zoom ou reposicionar as imagens anexadas, assim podemos personalizar como a imagem será exibida; - CONCLUÍDO / VALIDADO NO PAINEL DE PRODUÇÃO
+10. Na parte de produtos, adicione categoria, assim podemos segmentar os produtos cadastrados por tipo; - CONCLUÍDO / VALIDADO NO PAINEL E POR TESTES
 11. Regra nova para isentar fretes de clientes até quilometragem definida, config da loja; - CONCLUÍDO / VALIDADO POR TESTES
 12. Confirme se estamos usando a API para calculo de frete no app; - CONCLUÍDO / GOOGLE ROUTES V2 VALIDADO EM PRODUÇÃO
-
+13. No Cardápio, manter as mesmas ações para produtos novos e anteriores. O botão Excluir deve permanecer visível; quando o produto já possuir pedidos, fica apagado e desabilitado. Ao passar o mouse ou focar o controle, exibir um tooltip discreto: "Já existem pedidos para este produto. Para removê-lo da visualização, arquive." Produtos sem pedidos podem ser excluídos normalmente; - IMPLEMENTADO / VALIDADO LOCALMENTE / AGUARDANDO DEPLOY
 
 Link
 
@@ -72,7 +76,7 @@ FASE 1 — ESTABILIDADE E EXPERIÊNCIA MOBILE DA LOJA
 Aceite: funciona em 360 px de largura, não corta itens e o resumo do pedido
 continua visível em todas as etapas do checkout.
 
-[P1][IMPLEMENTADO / AGUARDANDO VALIDAÇÃO VISUAL] LOJA-07 — Remover referências a demonstração
+[P1][CONCLUÍDO / VALIDADO EM PRODUÇÃO] LOJA-07 — Remover referências a demonstração
 - Remover textos como ambiente demonstrativo, simulação, dados fictícios e
   mensagens equivalentes da experiência pública da loja.
 - Manter informações técnicas somente em logs ou telas internas.
@@ -87,11 +91,11 @@ Aceite: o cliente final não encontra nenhuma referência a ambiente de teste.
 Aceite: ao abrir a loja em 360–430 px, produtos aparecem antes da primeira
 rolagem longa e o destaque não ocupa a maior parte da tela.
 
-[P1][IMPLEMENTADO / AGUARDANDO VALIDAÇÃO VISUAL] LOJA-09 — Remover texto do cardápio digital
+[P1][CONCLUÍDO / VALIDADO EM PRODUÇÃO] LOJA-09 — Remover texto do cardápio digital
 - Remover “escolha o seu momento doce” da área do cardápio.
 Aceite: o texto não aparece em mobile nem desktop.
 
-[P1][IMPLEMENTADO / AGUARDANDO VALIDAÇÃO VISUAL] LOJA-10 — Cor configurável do bloco do logo
+[P1][CONCLUÍDO / VALIDADO NO PAINEL E NA LOJA] LOJA-10 — Cor configurável do bloco do logo
 - Criar a propriedade de cor de fundo da área da marca por loja.
 - Adicionar seletor de cor e prévia no painel administrativo.
 - Aplicar a cor na loja sem afetar as demais cores do tema.
@@ -102,7 +106,7 @@ Aceite: cada tenant salva sua cor e a alteração aparece apenas em sua loja.
 - Usar limites responsivos para não deformar nem cortar logos horizontais.
 Aceite: logo legível em celular e desktop, preservando a proporção original.
 
-[P0][IMPLEMENTADO / AGUARDANDO VALIDAÇÃO MOBILE] LOJA-12 — Impedir zoom automático no formulário mobile
+[P0][CONCLUÍDO / VALIDADO EM 360 E 390 PX] LOJA-12 — Impedir zoom automático no formulário mobile
 - Garantir tamanho mínimo de 16 px nos campos do checkout em iPhone/Safari.
 - Ajustar foco e rolagem ao abrir teclado sem alterar a escala da página.
 - Não bloquear o zoom manual de acessibilidade do usuário.
@@ -112,14 +116,14 @@ automaticamente; o campo focado permanece visível acima do teclado.
 
 FASE 2 — PERSONALIZAÇÃO DE IMAGENS NO PAINEL ADMINISTRATIVO
 
-[P1][IMPLEMENTADO / AGUARDANDO VALIDAÇÃO VISUAL] ADMIN-08 — Anexar imagem do computador no fundo do destaque
+[P1][CONCLUÍDO / VALIDADO NO PAINEL DE PRODUÇÃO] ADMIN-08 — Anexar imagem do computador no fundo do destaque
 - Reutilizar o fluxo de upload e redução de imagem já usado no logo e produto.
 - Permitir PNG, JPG e WebP para o fundo do bloco de destaque.
 - Exibir prévia, opção de trocar e opção de remover.
 - Validar tamanho final para não exceder os limites do Worker/banco.
 Aceite: a imagem pode ser escolhida no computador, salva e exibida na loja.
 
-[P1][IMPLEMENTADO / AGUARDANDO VALIDAÇÃO VISUAL] ADMIN-09 — Zoom e reposicionamento das imagens
+[P1][CONCLUÍDO / VALIDADO NO PAINEL DE PRODUÇÃO] ADMIN-09 — Zoom e reposicionamento das imagens
 - Adicionar escala e ponto focal horizontal/vertical para imagem principal e
   fundo do destaque.
 - Criar controles simples com prévia em tempo real no painel.
@@ -131,19 +135,19 @@ do sistema, e a prévia corresponde à loja publicada.
 
 FASE 3 — CATEGORIAS DE PRODUTOS
 
-[P1][IMPLEMENTADO / AGUARDANDO VALIDAÇÃO VISUAL] ADMIN-10A — Completar listagem e criação de categorias
+[P1][CONCLUÍDO / VALIDADO NO PAINEL E POR TESTES] ADMIN-10A — Completar listagem e criação de categorias
 - Consumir no painel os endpoints de categorias que já existem no backend.
 - Permitir criar categoria sem depender de já existir produto nela.
 - Exibir validação para nomes repetidos dentro da mesma loja.
 Aceite: uma loja vazia consegue criar sua primeira categoria pelo painel.
 
-[P1][IMPLEMENTADO / AGUARDANDO VALIDAÇÃO FUNCIONAL] ADMIN-10B — Editar produto com categoria
+[P1][CONCLUÍDO / VALIDADO POR TESTES] ADMIN-10B — Editar produto com categoria
 - Incluir categoria na edição de produto, não apenas no cadastro.
 - Permitir mover produto de categoria e também deixá-lo sem categoria.
 - Atualizar lista e vitrine imediatamente após salvar.
 Aceite: produto existente muda de categoria sem recriação e sem perder vendas.
 
-[P2][IMPLEMENTADO / AGUARDANDO VALIDAÇÃO VISUAL] ADMIN-10C — Gestão da ordem das categorias
+[P2][CONCLUÍDO / VALIDADO NO PAINEL E POR TESTES] ADMIN-10C — Gestão da ordem das categorias
 - Permitir ordenar categorias para controlar a sequência na vitrine.
 - Não excluir categoria que tenha histórico; usar desativação/arquivamento ou
   exigir realocação dos produtos antes da desativação.

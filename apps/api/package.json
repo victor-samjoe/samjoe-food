@@ -11,6 +11,10 @@
     "./serverless": {
       "types": "./src/worker-native.ts",
       "import": "./dist/worker-native.js"
+    },
+    "./public-media": {
+      "types": "./src/public-media.ts",
+      "import": "./dist/public-media.js"
     }
   },
   "scripts": {

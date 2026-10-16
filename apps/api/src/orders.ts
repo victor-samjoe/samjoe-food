@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import type { Database, TransactionalDatabase } from './catalog.js';
 import { resolveSession } from './auth.js';
 import { HttpError } from './errors.js';
+import { dispatchOrderEvent } from './sales-engine-webhook.js';
 
 type OrderIdParams = { orderId: string };
 type StoreSlugParams = { storeSlug: string };
@@ -29,6 +30,7 @@ type OrderSummaryRow = {
   customer_name: string; total_cents: number; delivery_fee_cents: number; currency: string;
   fulfillment: string; placed_at: string;
   district: string | null; items_label: string | null;
+  payment_method: string; payment_status: string;
 };
 type OrderDetailRow = OrderSummaryRow & {
   customer_id: string; phone_e164: string | null; email: string | null;
@@ -80,9 +82,17 @@ export function registerOrderRoutes(app: FastifyInstance, database: Transactiona
           o.address_snapshot->>'district' AS district,
           (SELECT string_agg(oi.quantity::text || '× ' || oi.name_snapshot, ', ' ORDER BY oi.id)
            FROM order_items oi WHERE oi.order_id = o.id AND oi.tenant_id = o.tenant_id) AS items_label,
+          payment.method AS payment_method, payment.status AS payment_status,
           COUNT(*) OVER () AS total
         FROM orders o
         JOIN stores s ON s.id = o.store_id AND s.tenant_id = o.tenant_id
+        LEFT JOIN LATERAL (
+          SELECT p.method, p.status
+          FROM payments p
+          WHERE p.order_id = o.id AND p.tenant_id = o.tenant_id
+          ORDER BY p.created_at DESC
+          LIMIT 1
+        ) payment ON true
         WHERE ${conditions.join(' AND ')}
         ORDER BY o.placed_at DESC
         LIMIT $${values.length - 1} OFFSET $${values.length}
@@ -154,7 +164,7 @@ export function registerOrderRoutes(app: FastifyInstance, database: Transactiona
       const session = await requireOperator(request, database);
       const { to, notes = null, actor_id = null } = request.body;
 
-      return database.transaction(async (tx) => {
+      const result = await database.transaction(async (tx) => {
         const { rows } = await tx.query<{ order_id: string; status: OrderStatus; tenant_id: string }>(
           `SELECT id AS order_id, status, tenant_id FROM orders WHERE id = $1 AND tenant_id = $2 FOR UPDATE`,
           [request.params.orderId, session.tenant_id],
@@ -168,6 +178,15 @@ export function registerOrderRoutes(app: FastifyInstance, database: Transactiona
         }
 
         if (to === 'CANCELLED') {
+          const { rows: paymentRows } = await tx.query<{ status: string }>(
+            `SELECT status FROM payments
+             WHERE order_id = $1 AND tenant_id = $2
+             ORDER BY created_at DESC LIMIT 1`,
+            [request.params.orderId, session.tenant_id],
+          );
+          if (['PAID', 'AUTHORIZED', 'PARTIALLY_REFUNDED'].includes(paymentRows[0]?.status ?? '')) {
+            throw new HttpError(409, 'paid_order_requires_refund', 'Pedido pago deve ser cancelado com estorno.');
+          }
           await releaseReservations(tx, session.tenant_id, request.params.orderId);
         }
 
@@ -186,13 +205,24 @@ export function registerOrderRoutes(app: FastifyInstance, database: Transactiona
           [session.tenant_id, request.params.orderId, JSON.stringify({ order_id: request.params.orderId, from_status: order.status, to_status: to })],
         );
 
-        return { order_id: request.params.orderId, from_status: order.status, to_status: to };
+        return { order_id: request.params.orderId, from_status: order.status, to_status: to, tenant_id: order.tenant_id };
       });
+
+      try {
+        await dispatchOrderEvent(database, result.tenant_id, result.order_id, 'order.status_changed', {
+          from: result.from_status,
+          to: result.to_status,
+        });
+      } catch (error) {
+        console.error(JSON.stringify({ type: 'sales_engine_dispatch_failed', eventType: 'order.status_changed', reason: (error as Error).message }));
+      }
+
+      return { order_id: result.order_id, from_status: result.from_status, to_status: result.to_status };
     },
   );
 }
 
-async function releaseReservations(database: Database, tenantId: string, orderId: string) {
+export async function releaseReservations(database: Database, tenantId: string, orderId: string) {
   const { rows } = await database.query<{ variant_id: string; quantity: number }>(
     `UPDATE inventory_reservations SET status = 'RELEASED', updated_at = now()
      WHERE tenant_id = $1 AND order_id = $2 AND status = 'ACTIVE'

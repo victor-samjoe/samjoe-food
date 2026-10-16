@@ -9,6 +9,7 @@ import { registerCustomerRoutes } from './customers.js';
 import { registerOrderRoutes } from './orders.js';
 import { registerDeliveryRoutes } from './deliveries.js';
 import { registerPaymentRoutes } from './payments.js';
+import { registerPaymentConfigRoutes } from './payment-config.js';
 import { registerControlCenterRoutes } from './control-center.js';
 import { HttpError } from './errors.js';
 
@@ -119,6 +120,7 @@ class WorkerRouter {
   }
   get(path: string, optionsOrHandler: RouteOptions | RouteHandler, handler?: RouteHandler) { this.register('GET', path, optionsOrHandler, handler); }
   post(path: string, optionsOrHandler: RouteOptions | RouteHandler, handler?: RouteHandler) { this.register('POST', path, optionsOrHandler, handler); }
+  put(path: string, optionsOrHandler: RouteOptions | RouteHandler, handler?: RouteHandler) { this.register('PUT', path, optionsOrHandler, handler); }
   patch(path: string, optionsOrHandler: RouteOptions | RouteHandler, handler?: RouteHandler) { this.register('PATCH', path, optionsOrHandler, handler); }
   delete(path: string, optionsOrHandler: RouteOptions | RouteHandler, handler?: RouteHandler) { this.register('DELETE', path, optionsOrHandler, handler); }
 }
@@ -162,6 +164,7 @@ registerCustomerRoutes(compatibleRouter, contextualDatabase);
 registerOrderRoutes(compatibleRouter, contextualDatabase);
 registerDeliveryRoutes(compatibleRouter, contextualDatabase);
 registerPaymentRoutes(compatibleRouter, contextualDatabase);
+registerPaymentConfigRoutes(compatibleRouter, contextualDatabase);
 registerControlCenterRoutes(compatibleRouter, contextualDatabase);
 
 const defaultClientFactory: ApiClientFactory = (connectionString) => {

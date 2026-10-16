@@ -18,7 +18,8 @@ function buildPool(overrides: Record<string, unknown[]> = {}): TransactionalData
 
   const pool: TransactionalDatabase = {
     async query<T extends QueryResultRow>(sql: string, values?: unknown[]): Promise<{ rows: T[] }> {
-      for (const [key, rows] of Object.entries(all)) {
+      const sorted = Object.entries(all).sort((a, b) => b[0].length - a[0].length);
+      for (const [key, rows] of sorted) {
         if (sql.includes(key)) return { rows: rows as T[] };
       }
       return { rows: [] };
@@ -97,18 +98,26 @@ test('PATCH /v1/admin/stores/:storeSlug aceita fundo configurável do destaque',
 });
 
 test('GET /v1/admin/stores/:storeSlug/products lista produtos com dados de legacy', async () => {
-  const pool = buildPool({
+  const productRows = [
+    {
+      product_id: 'prod-1', product_name: 'Bolo Aurora', description: null, is_active: true,
+      cover_image_scale: '1.25', cover_image_position_x: 35, cover_image_position_y: 65,
+      category_id: 'cat-1', category_name: 'Bolos no pote',
+      variant_id: 'var-1', sku: 'A-250', variant_name: '250 ml', price_cents: 1200, currency: 'BRL',
+      inventory_policy: 'TRACKED', variant_active: true, legacy_id: 'P001',
+    },
+  ];
+  const base = buildPool({
     'FROM auth_sessions': [validSession],
     'FROM stores': [{ store_id: 'store-a', store_slug: 'doce-horizonte-centro', store_name: 'Centro', currency: 'BRL' }],
-    'FROM stores\nJOIN products': [
-      {
-        product_id: 'prod-1', product_name: 'Bolo Aurora', description: null, is_active: true,
-        category_id: 'cat-1', category_name: 'Bolos no pote',
-        variant_id: 'var-1', sku: 'A-250', variant_name: '250 ml', price_cents: 1200, currency: 'BRL',
-        inventory_policy: 'TRACKED', variant_active: true, legacy_id: 'P001',
-      },
-    ],
   });
+  const pool: TransactionalDatabase = {
+    ...base,
+    async query<T extends QueryResultRow>(sql: string, values?: unknown[]): Promise<{ rows: T[] }> {
+      if (sql.includes('p.cover_image_scale')) return { rows: productRows as unknown as T[] };
+      return base.query<T>(sql, values);
+    },
+  };
   const app = buildApp({ pool });
   const res = await app.inject({
     method: 'GET', url: '/v1/admin/stores/doce-horizonte-centro/products',
@@ -117,6 +126,9 @@ test('GET /v1/admin/stores/:storeSlug/products lista produtos com dados de legac
   assert.equal(res.statusCode, 200);
   const body = res.json();
   assert.ok(Array.isArray(body.products));
+  assert.equal(body.products[0].cover_image_scale, 1.25);
+  assert.equal(body.products[0].cover_image_position_x, 35);
+  assert.equal(body.products[0].cover_image_position_y, 65);
   await app.close();
 });
 
@@ -155,7 +167,10 @@ test('PATCH /v1/admin/products/:id atualiza produto existente', async () => {
   const res = await app.inject({
     method: 'PATCH', url: '/v1/admin/products/prod-1',
     headers: { authorization: 'Bearer demo-token-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' },
-    payload: { name: 'Novo nome', is_active: false },
+    payload: {
+      name: 'Novo nome', is_active: false,
+      cover_image_scale: 0.75, cover_image_position_x: 30, cover_image_position_y: 70,
+    },
   });
   assert.equal(res.statusCode, 200);
   assert.equal(res.json().product_id, 'prod-1');

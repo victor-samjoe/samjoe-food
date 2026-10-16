@@ -4,8 +4,16 @@ import path from 'node:path';
 import pg from 'pg';
 
 async function main() {
-  const connectionString = process.env.DATABASE_URL;
+  let connectionString = process.env.DATABASE_URL;
+  const supabaseDbPassword = process.env.SUPABASE_DB_PASSWORD ?? process.env['\uFEFFSUPABASE_DB_PASSWORD'];
+  if (!connectionString && supabaseDbPassword) {
+    const poolerUrl = (await readFile(path.resolve(process.cwd(), 'supabase', '.temp', 'pooler-url'), 'utf8')).trim();
+    const parsed = new URL(poolerUrl);
+    parsed.password = supabaseDbPassword;
+    connectionString = parsed.toString();
+  }
   if (!connectionString) throw new Error('DATABASE_URL is required');
+  const requestedFilename = process.argv[2];
 
   const migrationsDirectory = path.resolve(process.cwd(), 'supabase', 'migrations');
   const pool = new pg.Pool({ connectionString, max: 1, idleTimeoutMillis: 10_000 });
@@ -21,9 +29,15 @@ async function main() {
     )
   `);
 
-    const files = (await readdir(migrationsDirectory))
-      .filter((filename) => /^\d{4}_[a-z0-9_]+\.sql$/.test(filename))
+    const migrationFiles = (await readdir(migrationsDirectory))
+      .filter((filename) => /^(\d{4}|\d{14})_[a-z0-9_]+\.sql$/.test(filename))
       .sort();
+    const files = requestedFilename
+      ? migrationFiles.filter((filename) => filename === requestedFilename)
+      : migrationFiles;
+    if (requestedFilename && files.length === 0) {
+      throw new Error(`Migration not found or invalid: ${requestedFilename}`);
+    }
 
     for (const filename of files) {
       const sql = await readFile(path.join(migrationsDirectory, filename), 'utf8');

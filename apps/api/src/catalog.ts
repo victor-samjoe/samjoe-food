@@ -43,6 +43,10 @@ type CatalogRow = {
   product_name: string | null;
   description: string | null;
   cover_image_url: string | null;
+  cover_image_scale: number | string | null;
+  cover_image_position_x: number | null;
+  cover_image_position_y: number | null;
+  product_updated_at?: Date | string | null;
   variant_id: string | null;
   sku: string | null;
   variant_name: string | null;
@@ -52,6 +56,7 @@ type CatalogRow = {
   preorder_limit: number | null;
   stock_available: number | null;
   storefront_config: Record<string, unknown> | null;
+  store_updated_at?: Date | string | null;
   delivery_status: 'PENDING' | 'ACTIVE';
   is_open: boolean;
   is_open_reason: string | null;
@@ -64,7 +69,46 @@ type CatalogRow = {
   card_on_site_enabled: boolean | null;
   pix_enabled: boolean | null;
   mercado_pago_enabled: boolean | null;
+  pix_key: string | null;
 };
+
+function mediaVersion(value: Date | string | null | undefined): string {
+  if (!value) return '1';
+  const date = value instanceof Date ? value : new Date(value);
+  return Number.isNaN(date.getTime()) ? '1' : String(date.getTime());
+}
+
+function embeddedMediaUrl(storeSlug: string, path: string[], source: unknown, version: Date | string | null | undefined): unknown {
+  if (typeof source !== 'string' || !source.startsWith('data:image/')) return source;
+  const encodedPath = path.map(segment => encodeURIComponent(segment)).join('/');
+  return `/api/store/${encodeURIComponent(storeSlug)}/media/${encodedPath}?v=${mediaVersion(version)}`;
+}
+
+function publicStorefrontConfig(
+  config: Record<string, unknown> | null,
+  storeSlug: string,
+  version: Date | string | null | undefined,
+): Record<string, unknown> {
+  if (!config) return {};
+  const result = { ...config };
+  for (const field of ['logo_url', 'hero_image_url', 'hero_bg_image_url'] as const) {
+    result[field] = embeddedMediaUrl(storeSlug, ['storefront', field], result[field], version);
+  }
+  if (Array.isArray(result.hero_slides)) {
+    result.hero_slides = result.hero_slides.map((slide, index) => {
+      if (!slide || typeof slide !== 'object' || Array.isArray(slide)) return slide;
+      const copy = { ...(slide as Record<string, unknown>) };
+      copy.image_url = embeddedMediaUrl(storeSlug, ['storefront', 'hero_slides', String(index)], copy.image_url, version);
+      return copy;
+    });
+  }
+  if (Array.isArray(result.hero_images)) {
+    result.hero_images = result.hero_images.map((image, index) =>
+      embeddedMediaUrl(storeSlug, ['storefront', 'hero_images', String(index)], image, version),
+    );
+  }
+  return result;
+}
 
 type StoreParams = { storeSlug: string };
 type StorePhoneQuery = { storeSlug: string; phone: string };
@@ -102,6 +146,7 @@ export function registerCatalogRoutes(app: FastifyInstance, pool: Database) {
         s.slug AS store_slug,
         s.timezone,
         s.storefront_config,
+        s.updated_at AS store_updated_at,
         s.delivery_status,
         COALESCE(s.is_open, true) AS is_open,
         s.is_open_reason,
@@ -114,6 +159,7 @@ export function registerCatalogRoutes(app: FastifyInstance, pool: Database) {
         s.card_on_site_enabled,
         s.pix_enabled,
         s.mercado_pago_enabled,
+        s.pix_key,
         c.id AS category_id,
         c.name AS category_name,
         c.slug AS category_slug,
@@ -122,6 +168,10 @@ export function registerCatalogRoutes(app: FastifyInstance, pool: Database) {
         p.name AS product_name,
         p.description,
         p.cover_image_url,
+        p.cover_image_scale,
+        p.cover_image_position_x,
+        p.cover_image_position_y,
+        p.updated_at AS product_updated_at,
         v.id AS variant_id,
         v.sku,
         v.name AS variant_name,
@@ -160,6 +210,7 @@ export function registerCatalogRoutes(app: FastifyInstance, pool: Database) {
 
     type ProductEntry = {
       id: string; name: string; description: string | null; image_url: string | null;
+      image_scale: number; image_position_x: number; image_position_y: number;
       variants: Array<{ id: string; sku: string; name: string; price: { amount_cents: number; currency: string }; available: boolean }>;
     };
     type CategoryEntry = { id: string | null; name: string | null; slug: string | null; products: Map<string, ProductEntry> };
@@ -176,7 +227,21 @@ export function registerCatalogRoutes(app: FastifyInstance, pool: Database) {
       }
       const cat = categories.get(catKey)!;
       if (!cat.products.has(row.product_id)) {
-        cat.products.set(row.product_id, { id: row.product_id, name: row.product_name, description: row.description, image_url: row.cover_image_url ?? null, variants: [] });
+        cat.products.set(row.product_id, {
+          id: row.product_id,
+          name: row.product_name,
+          description: row.description,
+          image_url: embeddedMediaUrl(
+            first.store_slug,
+            ['products', row.product_id],
+            row.cover_image_url,
+            row.product_updated_at,
+          ) as string | null,
+          image_scale: Number(row.cover_image_scale ?? 1),
+          image_position_x: row.cover_image_position_x ?? 50,
+          image_position_y: row.cover_image_position_y ?? 50,
+          variants: [],
+        });
       }
       const product = cat.products.get(row.product_id)!;
       if (row.variant_id && row.sku && row.variant_name && row.price_cents !== null && row.currency) {
@@ -192,10 +257,11 @@ export function registerCatalogRoutes(app: FastifyInstance, pool: Database) {
     return {
       store: {
         name: first.store_name, slug: first.store_slug, timezone: first.timezone,
-        storefront: first.storefront_config ?? {},
+        storefront: publicStorefrontConfig(first.storefront_config, first.store_slug, first.store_updated_at),
         delivery_enabled: first.delivery_status === 'ACTIVE',
         is_open: first.is_open, open_now,
         reason_closed: !open_now ? (first.is_open_reason ?? null) : null,
+        business_hours: first.business_hours ?? null,
         fulfillment_config: {
           delivery_enabled: first.delivery_status === 'ACTIVE',
           scheduled_delivery_enabled: first.scheduled_delivery_enabled ?? false,
@@ -208,6 +274,7 @@ export function registerCatalogRoutes(app: FastifyInstance, pool: Database) {
           card_on_site_enabled: first.card_on_site_enabled ?? false,
           pix_enabled: first.pix_enabled ?? true,
           mercado_pago_enabled: first.mercado_pago_enabled ?? false,
+          pix_key: first.pix_key ?? null,
         },
       },
       categories: categoryOrder.map(key => {
@@ -288,7 +355,7 @@ export function registerCatalogRoutes(app: FastifyInstance, pool: Database) {
       const { tenant_id, store_id } = storeRows[0];
       const limit = request.query.limit ?? 6;
 
-      type SuggestionRow = { product_id: string; product_name: string; description: string | null; image_url: string | null; variant_id: string; price_cents: number; currency: string; order_count: number };
+      type SuggestionRow = { product_id: string; product_name: string; description: string | null; image_url: string | null; product_updated_at: Date | string | null; variant_id: string; price_cents: number; currency: string; order_count: number };
 
       let rows: SuggestionRow[];
 
@@ -296,6 +363,7 @@ export function registerCatalogRoutes(app: FastifyInstance, pool: Database) {
         // Returning customer: their own most ordered products
         const result = await pool.query<SuggestionRow>(`
           SELECT p.id AS product_id, p.name AS product_name, p.description, p.cover_image_url AS image_url,
+            p.updated_at AS product_updated_at,
             v.id AS variant_id, v.price_cents, v.currency,
             COUNT(oi.id)::int AS order_count
           FROM customers c
@@ -305,7 +373,7 @@ export function registerCatalogRoutes(app: FastifyInstance, pool: Database) {
           JOIN products p ON p.id = v.product_id AND p.tenant_id = v.tenant_id AND p.is_active = true AND p.is_archived = false
           WHERE c.tenant_id = $1 AND c.phone_e164 = $2 AND o.store_id = $3
             AND o.status NOT IN ('CANCELLED', 'REFUNDED')
-          GROUP BY p.id, p.name, p.description, p.cover_image_url, v.id, v.price_cents, v.currency
+          GROUP BY p.id, p.name, p.description, p.cover_image_url, p.updated_at, v.id, v.price_cents, v.currency
           ORDER BY order_count DESC, p.name
           LIMIT $4
         `, [tenant_id, request.query.phone, store_id, limit]);
@@ -322,6 +390,7 @@ export function registerCatalogRoutes(app: FastifyInstance, pool: Database) {
         const excludeClause = excludeIds.length > 0 ? `AND p.id NOT IN (${placeholders})` : '';
         const result = await pool.query<SuggestionRow>(`
           SELECT p.id AS product_id, p.name AS product_name, p.description, p.cover_image_url AS image_url,
+            p.updated_at AS product_updated_at,
             v.id AS variant_id, v.price_cents, v.currency,
             COUNT(oi.id)::int AS order_count
           FROM order_items oi
@@ -331,7 +400,7 @@ export function registerCatalogRoutes(app: FastifyInstance, pool: Database) {
           WHERE oi.tenant_id = $1 AND o.store_id = $2
             AND o.status NOT IN ('CANCELLED', 'REFUNDED')
             ${excludeClause}
-          GROUP BY p.id, p.name, p.description, p.cover_image_url, v.id, v.price_cents, v.currency
+          GROUP BY p.id, p.name, p.description, p.cover_image_url, p.updated_at, v.id, v.price_cents, v.currency
           ORDER BY order_count DESC, p.name
           LIMIT $${excludeIds.length + 3}
         `, [tenant_id, store_id, ...excludeIds, remaining]);
@@ -344,7 +413,12 @@ export function registerCatalogRoutes(app: FastifyInstance, pool: Database) {
           product_id: r.product_id,
           product_name: r.product_name,
           description: r.description,
-          image_url: r.image_url,
+          image_url: embeddedMediaUrl(
+            request.params.storeSlug,
+            ['products', r.product_id],
+            r.image_url,
+            r.product_updated_at,
+          ),
           variant_id: r.variant_id,
           price_cents: r.price_cents,
           currency: r.currency,

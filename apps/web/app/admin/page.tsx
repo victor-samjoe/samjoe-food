@@ -35,6 +35,8 @@ type Order = {
   placed_at: string;
   district: string | null;
   items_label: string | null;
+  payment_method: string;
+  payment_status: string;
 };
 type Driver = {
   id: string;
@@ -86,6 +88,9 @@ type Product = {
   is_active: boolean;
   is_archived: boolean;
   cover_image_url: string | null;
+  cover_image_scale: number;
+  cover_image_position_x: number;
+  cover_image_position_y: number;
   category: { id: string; name: string } | null;
   variants: Variant[];
   has_orders: boolean;
@@ -113,6 +118,7 @@ type StorefrontConfig = {
   hero_eyebrow: string;
   hero_title: string;
   hero_description: string;
+  whatsapp_phone_e164: string;
   primary_color: string;
   accent_color: string;
   background_color: string;
@@ -164,6 +170,7 @@ type Store = {
   card_on_site_enabled?: boolean;
   pix_enabled?: boolean;
   mercado_pago_enabled?: boolean;
+  pix_key?: string | null;
 };
 type DeliveryPricing = {
   id: string;
@@ -187,8 +194,18 @@ type DeliveryDiagnostics = {
 };
 type MpIntegration = {
   has_access_token: boolean;
+  has_webhook_secret: boolean;
   public_key: string | null;
   is_active: boolean;
+};
+type StoreDomain = {
+  id: string;
+  hostname: string;
+  is_primary: boolean;
+  status: "PENDING" | "VERIFIED" | "DISABLED";
+  verification_token: string | null;
+  verified_at: string | null;
+  created_at: string;
 };
 type Notice = {
   id: string;
@@ -285,6 +302,7 @@ const defaultStorefront: StorefrontConfig = {
   hero_title: "Um pedaço de doçura para deixar o dia mais leve.",
   hero_description:
     "Escolha seus favoritos, monte o carrinho e envie seu pedido em poucos passos.",
+  whatsapp_phone_e164: "",
   primary_color: "#9f3f35",
   accent_color: "#e7b55f",
   background_color: "#fffaf4",
@@ -395,6 +413,7 @@ export default function AdminPage() {
     pix_enabled: true,
     mercado_pago_enabled: false,
   });
+  const [pixKey, setPixKey] = useState('');
   const [error, setError] = useState("");
   const [noticeHistory, setNoticeHistory] = useState<Notice[]>([]);
   const [toast, setToast] = useState<Notice | null>(null);
@@ -410,6 +429,11 @@ export default function AdminPage() {
   const [editingProductImage, setEditingProductImage] = useState<
     string | null | undefined
   >(undefined);
+  const [editingProductFrame, setEditingProductFrame] = useState({
+    scale: 1,
+    x: 50,
+    y: 50,
+  });
   const [orderView, setOrderView] = useState<"kanban" | "list">("kanban");
   const [pricing, setPricing] = useState<DeliveryPricing | null>(null);
   const [deliveryDiagnostics, setDeliveryDiagnostics] =
@@ -442,6 +466,7 @@ export default function AdminPage() {
   const [orderDetailLoading, setOrderDetailLoading] = useState(false);
   const [showArchived, setShowArchived] = useState(false);
   const [productFilter, setProductFilter] = useState("");
+  const [productCategoryFilter, setProductCategoryFilter] = useState("all");
   const [newProductOpen, setNewProductOpen] = useState(false);
   const [newProductForm, setNewProductForm] = useState({
     name: "",
@@ -450,6 +475,9 @@ export default function AdminPage() {
     sku: "",
     category_id: "",
     cover_image_url: null as string | null,
+    cover_image_scale: 1,
+    cover_image_position_x: 50,
+    cover_image_position_y: 50,
   });
   const [newProductImageBusy, setNewProductImageBusy] = useState(false);
   const [dateFilter, setDateFilter] = useState(() => saoPauloDate());
@@ -460,6 +488,8 @@ export default function AdminPage() {
   const [allCategories, setAllCategories] = useState<Category[]>([]);
   const [showCategoryManager, setShowCategoryManager] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState("");
+  const [renamingCategory, setRenamingCategory] = useState<Category | null>(null);
+  const [renamingCategoryName, setRenamingCategoryName] = useState("");
   const [variantPriceDrafts, setVariantPriceDrafts] = useState<
     Record<string, string>
   >({});
@@ -469,9 +499,13 @@ export default function AdminPage() {
   const [isOpenReason, setIsOpenReason] = useState("");
   const [showHoursConfig, setShowHoursConfig] = useState(false);
   const [hoursForm, setHoursForm] = useState<Record<string, BusinessHoursDay>>({});
-  const [mpConfig, setMpConfig] = useState<MpIntegration>({ has_access_token: false, public_key: null, is_active: false });
+  const [mpConfig, setMpConfig] = useState<MpIntegration>({ has_access_token: false, has_webhook_secret: false, public_key: null, is_active: false });
+  const mpConfigDirty = useRef(false);
   const [mpAccessToken, setMpAccessToken] = useState("");
   const [mpPublicKey, setMpPublicKey] = useState("");
+  const [mpWebhookSecret, setMpWebhookSecret] = useState("");
+  const [domains, setDomains] = useState<StoreDomain[]>([]);
+  const [newDomain, setNewDomain] = useState("");
 
   useEffect(() => {
     if (store?.store_name) document.title = `${store.store_name} — Admin`;
@@ -567,6 +601,7 @@ export default function AdminPage() {
           categoryData,
           diagnosticsData,
           mpData,
+          domainsData,
         ] = await Promise.all([
           api<{ orders: Order[] }>(
             `admin/stores/${storeSlug}/orders?limit=200`,
@@ -599,6 +634,10 @@ export default function AdminPage() {
           ).catch(() => null),
           api<{ integrations: { mercado_pago: MpIntegration } }>(
             `admin/stores/${storeSlug}/payment-config`,
+            accessToken,
+          ).catch(() => null),
+          api<{ domains: StoreDomain[] }>(
+            `admin/stores/${storeSlug}/domains`,
             accessToken,
           ).catch(() => null),
         ]);
@@ -636,11 +675,13 @@ export default function AdminPage() {
           pix_enabled: storeData.store.pix_enabled ?? true,
           mercado_pago_enabled: storeData.store.mercado_pago_enabled ?? false,
         });
-        if (mpData?.integrations?.mercado_pago) {
+        setPixKey(storeData.store.pix_key ?? '');
+        if (mpData?.integrations?.mercado_pago && !mpConfigDirty.current) {
           const mp = mpData.integrations.mercado_pago;
           setMpConfig(mp);
           setMpPublicKey(mp.public_key ?? "");
         }
+        setDomains(domainsData?.domains ?? []);
         setSelectedDriver((current) =>
           deliveryData.drivers.some(
             (driver) => driver.id === current && driver.status === "AVAILABLE",
@@ -689,7 +730,7 @@ export default function AdminPage() {
 
   useEffect(() => {
     if (!token) return;
-    const id = setInterval(() => void loadOpsData(token), 30000);
+    const id = setInterval(() => void loadOpsData(token), 5000);
     return () => clearInterval(id);
   }, [token, loadOpsData]);
   useEffect(
@@ -728,17 +769,51 @@ export default function AdminPage() {
   );
   const filteredProducts = useMemo(() => {
     const q = productFilter.trim().toLowerCase();
-    return products.filter((p) => {
-      if (!showArchived && p.is_archived) return false;
-      if (
-        q &&
-        !p.name.toLowerCase().includes(q) &&
-        !p.description?.toLowerCase().includes(q)
-      )
-        return false;
-      return true;
-    });
-  }, [products, productFilter, showArchived]);
+    const categoryOrder = new Map(
+      allCategories.map((category, index) => [category.category_id, index]),
+    );
+    return products
+      .filter((p) => {
+        if (!showArchived && p.is_archived) return false;
+        if (
+          productCategoryFilter !== "all" &&
+          (productCategoryFilter === "uncategorized"
+            ? p.category !== null
+            : p.category?.id !== productCategoryFilter)
+        )
+          return false;
+        if (
+          q &&
+          !p.name.toLowerCase().includes(q) &&
+          !p.description?.toLowerCase().includes(q)
+        )
+          return false;
+        return true;
+      })
+      .sort((a, b) => {
+        const categoryA = a.category
+          ? (categoryOrder.get(a.category.id) ?? Number.MAX_SAFE_INTEGER - 1)
+          : Number.MAX_SAFE_INTEGER;
+        const categoryB = b.category
+          ? (categoryOrder.get(b.category.id) ?? Number.MAX_SAFE_INTEGER - 1)
+          : Number.MAX_SAFE_INTEGER;
+        return categoryA - categoryB || a.name.localeCompare(b.name, "pt-BR");
+      });
+  }, [products, productFilter, productCategoryFilter, showArchived, allCategories]);
+  const groupedProducts = useMemo(() => {
+    const groups = new Map<string, { id: string; name: string; products: Product[] }>();
+    for (const product of filteredProducts) {
+      const id = product.category?.id ?? "uncategorized";
+      const group = groups.get(id) ?? {
+        id,
+        name: product.category?.name ?? "Sem categoria",
+        products: [],
+      };
+      group.products.push(product);
+      groups.set(id, group);
+    }
+    return [...groups.values()];
+  }, [filteredProducts]);
 
   async function login(event: FormEvent) {
     event.preventDefault();
@@ -808,7 +883,34 @@ export default function AdminPage() {
     );
   }
   async function cancelOrder(id: string) {
-    if (!window.confirm("Cancelar este pedido?")) return;
+    try {
+      const paymentData = await api<{ payment: { status: string; amount_cents: number } }>(
+        `admin/orders/${id}/payment`,
+        token,
+      );
+      if (paymentData.payment.status === "PAID") {
+        if (!window.confirm(`Cancelar o pedido e estornar ${money(paymentData.payment.amount_cents)} pelo Mercado Pago? Essa ação devolve o dinheiro ao cliente.`)) return;
+        await run(
+          id,
+          async () => {
+            await api(`admin/orders/${id}/payment/refund`, token, {
+              method: "POST",
+              body: JSON.stringify({ reason: "Pedido cancelado pela loja" }),
+            });
+          },
+          "Pedido cancelado e pagamento estornado.",
+        );
+        return;
+      }
+      if (["AUTHORIZED", "PARTIALLY_REFUNDED"].includes(paymentData.payment.status)) {
+        pushNotice("Este pagamento exige revisão administrativa antes do cancelamento.", "error");
+        return;
+      }
+    } catch (cause) {
+      pushNotice(message(cause), "error");
+      return;
+    }
+    if (!window.confirm("Cancelar este pedido sem pagamento confirmado?")) return;
     await transitionOrder(id, "CANCELLED");
   }
   async function toggleProduct(product: Product) {
@@ -853,6 +955,9 @@ export default function AdminPage() {
             price_cents: priceCents,
             sku: newProductForm.sku || `SKU-${Date.now()}`,
             cover_image_url: newProductForm.cover_image_url,
+            cover_image_scale: newProductForm.cover_image_scale,
+            cover_image_position_x: newProductForm.cover_image_position_x,
+            cover_image_position_y: newProductForm.cover_image_position_y,
           }),
         }),
       "Produto criado.",
@@ -865,6 +970,9 @@ export default function AdminPage() {
       sku: "",
       category_id: "",
       cover_image_url: null,
+      cover_image_scale: 1,
+      cover_image_position_x: 50,
+      cover_image_position_y: 50,
     });
   }
   async function attachNewProductImage(event: ChangeEvent<HTMLInputElement>) {
@@ -897,6 +1005,9 @@ export default function AdminPage() {
       body.cover_image_url = editingProductImage;
     if (editingProductCategory !== undefined)
       body.category_id = editingProductCategory;
+    body.cover_image_scale = editingProductFrame.scale;
+    body.cover_image_position_x = editingProductFrame.x;
+    body.cover_image_position_y = editingProductFrame.y;
     const changedVariants = editingProduct.variants.filter(
       (v) =>
         variantPriceDrafts[v.id] !== undefined &&
@@ -924,6 +1035,7 @@ export default function AdminPage() {
     setEditingProductImage(undefined);
     setVariantPriceDrafts({});
     setEditingProductCategory(undefined);
+    setEditingProductFrame({ scale: 1, x: 50, y: 50 });
   }
   async function createCategory(event: FormEvent) {
     event.preventDefault();
@@ -940,21 +1052,27 @@ export default function AdminPage() {
     );
     setNewCategoryName("");
   }
-  async function renameCategory(category: Category) {
-    const name = window
-      .prompt("Novo nome da categoria:", category.name)
-      ?.trim();
-    if (!name || name === category.name) return;
+  async function renameCategory(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!renamingCategory) return;
+    const name = renamingCategoryName.trim();
+    if (!name || name === renamingCategory.name) {
+      setRenamingCategory(null);
+      setRenamingCategoryName("");
+      return;
+    }
     await run(
-      `category-${category.category_id}`,
+      `category-${renamingCategory.category_id}`,
       () =>
-        api(`admin/categories/${category.category_id}`, token, {
+        api(`admin/categories/${renamingCategory.category_id}`, token, {
           method: "PATCH",
           body: JSON.stringify({ name }),
         }) as Promise<void>,
       "Categoria renomeada.",
       true,
     );
+    setRenamingCategory(null);
+    setRenamingCategoryName("");
   }
   async function toggleCategory(category: Category) {
     if (category.is_active && category.product_count > 0) {
@@ -1069,17 +1187,64 @@ export default function AdminPage() {
     const body: Record<string, unknown> = { is_active: mpConfig.is_active };
     if (mpAccessToken.trim()) body["access_token"] = mpAccessToken.trim();
     if (mpPublicKey.trim()) body["public_key"] = mpPublicKey.trim();
+    if (mpWebhookSecret.trim()) body["webhook_secret"] = mpWebhookSecret.trim();
+    setBusy("mp-config");
+    try {
+      const result = await api<{ mercado_pago: MpIntegration }>(
+        `admin/stores/${store.store_slug}/payment-config/mercado-pago`,
+        token,
+        { method: "PUT", body: JSON.stringify(body) },
+      );
+      pushNotice("Credenciais salvas.");
+      mpConfigDirty.current = false;
+      setMpConfig(result.mercado_pago);
+      setMpAccessToken("");
+      setMpWebhookSecret("");
+      setMpPublicKey(result.mercado_pago.public_key ?? "");
+    } catch (cause) {
+      pushNotice(message(cause), "error");
+    } finally {
+      setBusy("");
+    }
+  }
+  async function addDomain() {
+    if (!store || !newDomain.trim()) return;
     await run(
-      "mp-config",
-      () =>
-        api(`admin/stores/${store.store_slug}/payment-config/mercado-pago`, token, {
-          method: "PUT",
-          body: JSON.stringify(body),
-        }),
-      "Credenciais salvas.",
+      "domain-add",
+      async () => { await api<{ domain: StoreDomain }>(`admin/stores/${store.store_slug}/domains`, token, { method: "POST", body: JSON.stringify({ hostname: newDomain.trim() }) }); },
+      "Domínio adicionado.",
     );
-    setMpAccessToken("");
-    await loadMpConfig();
+    setNewDomain("");
+    const data = await api<{ domains: StoreDomain[] }>(`admin/stores/${store.store_slug}/domains`, token).catch(() => null);
+    if (data) setDomains(data.domains);
+  }
+  async function deleteDomain(domainId: string) {
+    if (!store) return;
+    await run(
+      `domain-del-${domainId}`,
+      () => api(`admin/stores/${store.store_slug}/domains/${domainId}`, token, { method: "DELETE" }),
+      "Domínio removido.",
+    );
+    setDomains((current) => current.filter((d) => d.id !== domainId));
+  }
+  async function verifyDomain(domainId: string) {
+    if (!store) return;
+    await run(
+      `domain-verify-${domainId}`,
+      async () => { await api<{ verified: boolean; message: string }>(`admin/stores/${store.store_slug}/domains/${domainId}/verify`, token, { method: "POST" }); },
+      "Domínio verificado!",
+    );
+    const data = await api<{ domains: StoreDomain[] }>(`admin/stores/${store.store_slug}/domains`, token).catch(() => null);
+    if (data) setDomains(data.domains);
+  }
+  async function setPrimaryDomain(domainId: string) {
+    if (!store) return;
+    await run(
+      `domain-primary-${domainId}`,
+      () => api(`admin/stores/${store.store_slug}/domains/${domainId}/primary`, token, { method: "PATCH" }),
+      "Domínio principal definido.",
+    );
+    setDomains((current) => current.map((d) => ({ ...d, is_primary: d.id === domainId })));
   }
   async function attachProductImage(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
@@ -1179,6 +1344,7 @@ export default function AdminPage() {
             },
             ...fulfillmentConfig,
             ...paymentConfig,
+            pix_key: pixKey.trim() || null,
           }),
         }),
       "Configurações da loja e da vitrine salvas.",
@@ -2456,6 +2622,20 @@ export default function AdminPage() {
                     <button onClick={() => setProductFilter("")}>×</button>
                   )}
                 </div>
+                <select
+                  className={styles.productCategoryFilter}
+                  value={productCategoryFilter}
+                  onChange={(event) => setProductCategoryFilter(event.target.value)}
+                  aria-label="Filtrar produtos por categoria"
+                >
+                  <option value="all">Todas as categorias</option>
+                  {allCategories.map((category) => (
+                    <option key={category.category_id} value={category.category_id}>
+                      {category.name}{!category.is_active ? " (arquivada)" : ""}
+                    </option>
+                  ))}
+                  <option value="uncategorized">Sem categoria</option>
+                </select>
                 <label className={styles.productListArchiveToggle}>
                   <input
                     type="checkbox"
@@ -2517,7 +2697,10 @@ export default function AdminPage() {
                           </button>
                           <button
                             type="button"
-                            onClick={() => void renameCategory(category)}
+                            onClick={() => {
+                              setRenamingCategory(category);
+                              setRenamingCategoryName(category.name);
+                            }}
                           >
                             Renomear
                           </button>
@@ -2563,14 +2746,27 @@ export default function AdminPage() {
                 {filteredProducts.length === 0 && (
                   <Empty text="Nenhum produto encontrado." />
                 )}
-                {filteredProducts.map((product) => (
+                {groupedProducts.map((group) => (
+                  <section className={styles.productCategoryGroup} key={group.id}>
+                    <h3 className={styles.productCategoryGroupTitle}>
+                      <span>{group.name}</span>
+                      <small>{group.products.length} produto(s)</small>
+                    </h3>
+                    {group.products.map((product) => (
                   <article
                     className={`${styles.productListRow} ${!product.is_active && !product.is_archived ? styles.muted : ""} ${product.is_archived ? styles.archivedRow : ""}`}
                     key={product.id}
                   >
                     <div className={styles.productListThumb}>
                       {product.cover_image_url ? (
-                        <img src={product.cover_image_url} alt="" />
+                        <img
+                          src={product.cover_image_url}
+                          alt=""
+                          style={{
+                            objectPosition: `${product.cover_image_position_x ?? 50}% ${product.cover_image_position_y ?? 50}%`,
+                            transform: `scale(${product.cover_image_scale ?? 1})`,
+                          }}
+                        />
                       ) : (
                         <span>{product.name.slice(0, 1)}</span>
                       )}
@@ -2614,6 +2810,11 @@ export default function AdminPage() {
                               setEditingProductCategory(
                                 product.category?.id ?? null,
                               );
+                              setEditingProductFrame({
+                                scale: product.cover_image_scale ?? 1,
+                                x: product.cover_image_position_x ?? 50,
+                                y: product.cover_image_position_y ?? 50,
+                              });
                             }}
                           >
                             Editar
@@ -2626,18 +2827,61 @@ export default function AdminPage() {
                       <button onClick={() => void archiveProduct(product)}>
                         {product.is_archived ? "Restaurar" : "Arquivar"}
                       </button>
-                      {!product.has_orders && (
+                      <span
+                        className={product.has_orders ? styles.disabledActionTooltip : undefined}
+                        data-tooltip={product.has_orders
+                          ? "Já existem pedidos para este produto. Para removê-lo da visualização, arquive."
+                          : undefined}
+                        tabIndex={product.has_orders ? 0 : undefined}
+                      >
                         <button
                           className={styles.dangerAction}
+                          disabled={product.has_orders}
                           onClick={() => void deleteProduct(product)}
                         >
                           Excluir
                         </button>
-                      )}
+                      </span>
                     </div>
                   </article>
+                    ))}
+                  </section>
                 ))}
               </div>
+              {renamingCategory && (
+                <form className={styles.modal} onSubmit={renameCategory}>
+                  <div>
+                    <h2>Renomear categoria</h2>
+                    <label>
+                      Nome da categoria
+                      <input
+                        autoFocus
+                        value={renamingCategoryName}
+                        onChange={(event) => setRenamingCategoryName(event.target.value)}
+                        maxLength={120}
+                        required
+                      />
+                    </label>
+                    <footer>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setRenamingCategory(null);
+                          setRenamingCategoryName("");
+                        }}
+                      >
+                        Cancelar
+                      </button>
+                      <button
+                        className={styles.primary}
+                        disabled={busy === `category-${renamingCategory.category_id}`}
+                      >
+                        Salvar nome
+                      </button>
+                    </footer>
+                  </div>
+                </form>
+              )}
               {editingProduct && (
                 <form className={styles.modal} onSubmit={saveProduct}>
                   <div>
@@ -2708,15 +2952,20 @@ export default function AdminPage() {
                       {(editingProductImage !== undefined
                         ? editingProductImage
                         : editingProduct.cover_image_url) && (
-                        <img
-                          src={
-                            (editingProductImage !== undefined
-                              ? editingProductImage
-                              : editingProduct.cover_image_url)!
-                          }
-                          alt=""
-                          className={styles.productCoverPreview}
-                        />
+                        <div className={styles.productFramePreview}>
+                          <img
+                            src={
+                              (editingProductImage !== undefined
+                                ? editingProductImage
+                                : editingProduct.cover_image_url)!
+                            }
+                            alt="Prévia do enquadramento do produto"
+                            style={{
+                              objectPosition: `${editingProductFrame.x}% ${editingProductFrame.y}%`,
+                              transform: `scale(${editingProductFrame.scale})`,
+                            }}
+                          />
+                        </div>
                       )}
                       <input
                         type="file"
@@ -2726,12 +2975,44 @@ export default function AdminPage() {
                       {(editingProductImage !== undefined
                         ? editingProductImage
                         : editingProduct.cover_image_url) && (
-                        <button
-                          type="button"
-                          onClick={() => setEditingProductImage(null)}
-                        >
-                          Remover foto
-                        </button>
+                        <>
+                          <div className={styles.productFrameControls}>
+                            <RangeField
+                              label="Zoom"
+                              value={editingProductFrame.scale}
+                              min={0.75}
+                              max={2}
+                              step={0.05}
+                              display={`${Math.round(editingProductFrame.scale * 100)}%`}
+                              onChange={(scale) => setEditingProductFrame((current) => ({ ...current, scale }))}
+                            />
+                            <RangeField
+                              label="Posição horizontal"
+                              value={editingProductFrame.x}
+                              min={0}
+                              max={100}
+                              display={`${editingProductFrame.x}%`}
+                              onChange={(x) => setEditingProductFrame((current) => ({ ...current, x }))}
+                            />
+                            <RangeField
+                              label="Posição vertical"
+                              value={editingProductFrame.y}
+                              min={0}
+                              max={100}
+                              display={`${editingProductFrame.y}%`}
+                              onChange={(y) => setEditingProductFrame((current) => ({ ...current, y }))}
+                            />
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditingProductImage(null);
+                              setEditingProductFrame({ scale: 1, x: 50, y: 50 });
+                            }}
+                          >
+                            Remover foto
+                          </button>
+                        </>
                       )}
                     </label>
                     <footer>
@@ -2742,6 +3023,7 @@ export default function AdminPage() {
                           setEditingProductImage(undefined);
                           setVariantPriceDrafts({});
                           setEditingProductCategory(undefined);
+                          setEditingProductFrame({ scale: 1, x: 50, y: 50 });
                         }}
                       >
                         Cancelar
@@ -2836,11 +3118,16 @@ export default function AdminPage() {
                     <label>
                       Foto do produto
                       {newProductForm.cover_image_url && (
-                        <img
-                          src={newProductForm.cover_image_url}
-                          alt=""
-                          className={styles.productCoverPreview}
-                        />
+                        <div className={styles.productFramePreview}>
+                          <img
+                            src={newProductForm.cover_image_url}
+                            alt="Prévia do enquadramento do produto"
+                            style={{
+                              objectPosition: `${newProductForm.cover_image_position_x}% ${newProductForm.cover_image_position_y}%`,
+                              transform: `scale(${newProductForm.cover_image_scale})`,
+                            }}
+                          />
+                        </div>
                       )}
                       <input
                         type="file"
@@ -2849,17 +3136,49 @@ export default function AdminPage() {
                         disabled={newProductImageBusy}
                       />
                       {newProductForm.cover_image_url && (
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setNewProductForm((c) => ({
-                              ...c,
-                              cover_image_url: null,
-                            }))
-                          }
-                        >
-                          Remover
-                        </button>
+                        <>
+                          <div className={styles.productFrameControls}>
+                            <RangeField
+                              label="Zoom"
+                              value={newProductForm.cover_image_scale}
+                              min={0.75}
+                              max={2}
+                              step={0.05}
+                              display={`${Math.round(newProductForm.cover_image_scale * 100)}%`}
+                              onChange={(cover_image_scale) => setNewProductForm((current) => ({ ...current, cover_image_scale }))}
+                            />
+                            <RangeField
+                              label="Posição horizontal"
+                              value={newProductForm.cover_image_position_x}
+                              min={0}
+                              max={100}
+                              display={`${newProductForm.cover_image_position_x}%`}
+                              onChange={(cover_image_position_x) => setNewProductForm((current) => ({ ...current, cover_image_position_x }))}
+                            />
+                            <RangeField
+                              label="Posição vertical"
+                              value={newProductForm.cover_image_position_y}
+                              min={0}
+                              max={100}
+                              display={`${newProductForm.cover_image_position_y}%`}
+                              onChange={(cover_image_position_y) => setNewProductForm((current) => ({ ...current, cover_image_position_y }))}
+                            />
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setNewProductForm((c) => ({
+                                ...c,
+                                cover_image_url: null,
+                                cover_image_scale: 1,
+                                cover_image_position_x: 50,
+                                cover_image_position_y: 50,
+                              }))
+                            }
+                          >
+                            Remover
+                          </button>
+                        </>
                       )}
                     </label>
                     <footer>
@@ -2874,6 +3193,9 @@ export default function AdminPage() {
                             sku: "",
                             category_id: "",
                             cover_image_url: null,
+                            cover_image_scale: 1,
+                            cover_image_position_x: 50,
+                            cover_image_position_y: 50,
                           });
                         }}
                       >
@@ -2938,6 +3260,20 @@ export default function AdminPage() {
                           }))
                         }
                         maxLength={120}
+                      />
+                    </label>
+                    <label>
+                      WhatsApp da loja
+                      <input
+                        value={storefront.whatsapp_phone_e164}
+                        onChange={(e) =>
+                          setStorefront((current) => ({
+                            ...current,
+                            whatsapp_phone_e164: e.target.value,
+                          }))
+                        }
+                        placeholder="+5511999999999"
+                        pattern="\+[1-9][0-9]{7,14}"
                       />
                     </label>
                     <label>
@@ -3727,6 +4063,24 @@ export default function AdminPage() {
                     <p style={{ gridColumn: "1 / -1", margin: 0, opacity: 0.6, fontSize: "0.85rem" }}>
                       &quot;Pague na entrega&quot; combina Dinheiro e Cartão — o operador resolve na hora.
                     </p>
+                    {paymentConfig.pix_enabled && (
+                      <label style={{ gridColumn: "1 / -1" }}>
+                        <span style={{ display: "block", fontSize: "0.78rem", fontWeight: 700, marginBottom: "0.3rem", color: "#555" }}>
+                          Chave PIX (opcional)
+                        </span>
+                        <input
+                          type="text"
+                          value={pixKey}
+                          onChange={(e) => setPixKey(e.target.value)}
+                          placeholder="CPF, CNPJ, e-mail, telefone ou chave aleatória"
+                          maxLength={100}
+                          style={{ width: "100%", boxSizing: "border-box" }}
+                        />
+                        <small style={{ opacity: 0.6, fontSize: "0.78rem" }}>
+                          Exibida para o cliente quando não há integração Mercado Pago ativa. Confirmação manual.
+                        </small>
+                      </label>
+                    )}
                   </div>
                 </Panel>
               </div>
@@ -3746,7 +4100,7 @@ export default function AdminPage() {
                       <input
                         type="checkbox"
                         checked={mpConfig.is_active}
-                        onChange={(e) => setMpConfig((c) => ({ ...c, is_active: e.target.checked }))}
+                        onChange={(e) => { mpConfigDirty.current = true; setMpConfig((c) => ({ ...c, is_active: e.target.checked })); }}
                       />
                       <span>
                         <strong>Integração ativa</strong>
@@ -3788,6 +4142,26 @@ export default function AdminPage() {
                       <small style={{ opacity: 0.6, fontSize: "0.78rem" }}>Chave pública para inicializar o checkout no navegador.</small>
                     </div>
                     <div style={{ gridColumn: "1 / -1" }}>
+                      <label style={{ display: "block", fontWeight: 700, fontSize: "0.85rem", marginBottom: 4 }}>
+                        Assinatura secreta do Webhook
+                        {mpConfig.has_webhook_secret && (
+                          <span style={{ marginLeft: 8, fontWeight: 400, color: "#2d7a2d", fontSize: "0.8rem" }}>✓ configurada</span>
+                        )}
+                      </label>
+                      <input
+                        type="password"
+                        className={styles.formInput}
+                        value={mpWebhookSecret}
+                        onChange={(e) => setMpWebhookSecret(e.target.value)}
+                        placeholder={mpConfig.has_webhook_secret ? "••••••••  (deixe em branco para manter)" : "Chave gerada em Webhooks no Mercado Pago"}
+                        autoComplete="off"
+                        style={{ width: "100%", boxSizing: "border-box" }}
+                      />
+                      <small style={{ opacity: 0.6, fontSize: "0.78rem" }}>
+                        URL: https://lojas.samjoe.com.br/api/webhooks/mercado-pago?store={store.store_slug}
+                      </small>
+                    </div>
+                    <div style={{ gridColumn: "1 / -1" }}>
                       <button
                         type="button"
                         className={styles.primary}
@@ -3806,6 +4180,122 @@ export default function AdminPage() {
                   </div>
                 </Panel>
               </div>
+              <div
+                className={
+                  storeStep === 5
+                    ? styles.storeStepPanel
+                    : styles.storeStepHidden
+                }
+              >
+                <Panel
+                  title="Domínios"
+                  subtitle="Conecte um domínio próprio para sua loja (ex: loja.seusite.com.br)"
+                >
+                  <div className={styles.formGrid}>
+                    <div style={{ gridColumn: "1 / -1", display: "flex", gap: 8 }}>
+                      <input
+                        type="text"
+                        className={styles.formInput}
+                        value={newDomain}
+                        onChange={(e) => setNewDomain(e.target.value)}
+                        placeholder="minha-loja.com.br"
+                        style={{ flex: 1 }}
+                        onKeyDown={(e) => e.key === "Enter" && void addDomain()}
+                      />
+                      <button
+                        type="button"
+                        className={styles.primary}
+                        disabled={!newDomain.trim() || busy === "domain-add"}
+                        onClick={() => void addDomain()}
+                      >
+                        {busy === "domain-add" ? "…" : "Adicionar"}
+                      </button>
+                    </div>
+                    {domains.length === 0 && (
+                      <p style={{ gridColumn: "1 / -1", margin: 0, opacity: 0.5, fontSize: "0.85rem" }}>
+                        Nenhum domínio configurado ainda.
+                      </p>
+                    )}
+                    {domains.map((domain) => (
+                      <div
+                        key={domain.id}
+                        style={{
+                          gridColumn: "1 / -1",
+                          background: "#faf7f3",
+                          border: "1px solid #e8ddd5",
+                          borderRadius: 10,
+                          padding: "12px 14px",
+                          display: "flex",
+                          flexDirection: "column",
+                          gap: 8,
+                        }}
+                      >
+                        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                          <strong style={{ fontSize: "0.9rem", flex: 1 }}>{domain.hostname}</strong>
+                          <span style={{
+                            fontSize: "0.75rem", fontWeight: 700, padding: "2px 8px", borderRadius: 99,
+                            background: domain.status === "VERIFIED" ? "#e8f5e8" : "#fde8e6",
+                            color: domain.status === "VERIFIED" ? "#1e5222" : "#7a2e28",
+                          }}>
+                            {domain.status === "VERIFIED" ? "✓ Verificado" : domain.status === "DISABLED" ? "Desativado" : "Pendente"}
+                          </span>
+                          {domain.is_primary && (
+                            <span style={{ fontSize: "0.75rem", fontWeight: 700, padding: "2px 8px", borderRadius: 99, background: "#e8edf8", color: "#1e3a7a" }}>
+                              Principal
+                            </span>
+                          )}
+                        </div>
+                        {domain.status === "PENDING" && domain.verification_token && (
+                          <div style={{ fontSize: "0.8rem", color: "#5a4e45", background: "#fff8f0", border: "1px solid #e8d8c5", borderRadius: 8, padding: "10px 12px" }}>
+                            <p style={{ margin: "0 0 6px", fontWeight: 700 }}>Configure o DNS do seu domínio:</p>
+                            <p style={{ margin: "0 0 4px" }}>
+                              <code style={{ background: "#f0e8e0", padding: "2px 6px", borderRadius: 4 }}>CNAME</code>
+                              {" "}<strong>{domain.hostname}</strong> → <code style={{ background: "#f0e8e0", padding: "2px 6px", borderRadius: 4 }}>lojas.samjoe.com.br</code>
+                            </p>
+                            <p style={{ margin: "4px 0 4px", fontWeight: 700 }}>Para verificar a propriedade, adicione também:</p>
+                            <p style={{ margin: 0 }}>
+                              <code style={{ background: "#f0e8e0", padding: "2px 6px", borderRadius: 4 }}>TXT</code>
+                              {" "}<strong>_samjoe-verify.{domain.hostname}</strong>
+                              {" → "}<code style={{ background: "#f0e8e0", padding: "2px 6px", borderRadius: 4, wordBreak: "break-all" }}>samjoe-verify={domain.verification_token}</code>
+                            </p>
+                          </div>
+                        )}
+                        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                          {domain.status === "PENDING" && (
+                            <button
+                              type="button"
+                              disabled={!!busy.startsWith("domain-verify")}
+                              onClick={() => void verifyDomain(domain.id)}
+                              style={{ fontSize: "0.8rem", padding: "5px 12px", borderRadius: 7, border: "1px solid #9ec9a0", background: "#e8f5e8", color: "#1e5222", cursor: "pointer", fontWeight: 700 }}
+                            >
+                              {busy === `domain-verify-${domain.id}` ? "Verificando…" : "Verificar DNS"}
+                            </button>
+                          )}
+                          {domain.status === "VERIFIED" && !domain.is_primary && (
+                            <button
+                              type="button"
+                              onClick={() => void setPrimaryDomain(domain.id)}
+                              style={{ fontSize: "0.8rem", padding: "5px 12px", borderRadius: 7, border: "1px solid #c5d0e8", background: "#e8edf8", color: "#1e3a7a", cursor: "pointer", fontWeight: 700 }}
+                            >
+                              Definir como principal
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => void deleteDomain(domain.id)}
+                            style={{ fontSize: "0.8rem", padding: "5px 12px", borderRadius: 7, border: "1px solid #f0b9b3", background: "#fde8e6", color: "#7a2e28", cursor: "pointer", fontWeight: 700 }}
+                          >
+                            Remover
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                    <p style={{ gridColumn: "1 / -1", margin: 0, opacity: 0.55, fontSize: "0.8rem" }}>
+                      Após configurar o DNS, aguarde até 48h para propagação e clique em "Verificar DNS". O domínio principal é usado nos links do Mercado Pago.
+                    </p>
+                  </div>
+                </Panel>
+              </div>
               <div className={styles.storeSteps}>
                 <button
                   type="button"
@@ -3817,7 +4307,7 @@ export default function AdminPage() {
                   ← Anterior
                 </button>
                 <nav aria-label="Etapas da configuração">
-                  {["Identidade", "Aparência", "Endereço", "Atendimento", "Pagamentos"].map(
+                  {["Identidade", "Aparência", "Endereço", "Atendimento", "Pagamentos", "Domínios"].map(
                     (label, index) => (
                       <button
                         type="button"
@@ -3836,11 +4326,11 @@ export default function AdminPage() {
                   )}
                 </nav>
                 <div className={styles.storeStepActions}>
-                  {storeStep < 4 && (
+                  {storeStep < 5 && (
                     <button
                       type="button"
                       onClick={() =>
-                        setStoreStep((current) => Math.min(4, current + 1))
+                        setStoreStep((current) => Math.min(5, current + 1))
                       }
                     >
                       Próxima →
@@ -4081,6 +4571,9 @@ function KanbanCard({
         <span>{isDelivery ? "Entrega" : "Retirada"}</span>
         <span>{formatTime(order.placed_at)}</span>
       </div>
+      <div className={styles.paymentBadge} data-payment-status={order.payment_status}>
+        {paymentLabel(order.payment_method, order.payment_status)}
+      </div>
       <div className={styles.cardSummary}>
         {order.items_label && (
           <span className={styles.cardItems}>{order.items_label}</span>
@@ -4135,6 +4628,29 @@ function KanbanCard({
     </article>
   );
 }
+
+function paymentLabel(method: string, status: string) {
+  const methodName: Record<string, string> = {
+    PIX: "Pix",
+    MERCADO_PAGO: "Mercado Pago",
+    CASH: "Dinheiro",
+    CARD: "Cartão",
+  };
+  const statusName: Record<string, string> = {
+    PAID: "pago",
+    PENDING: "aguardando pagamento",
+    CREATED: "a receber",
+    AUTHORIZED: "autorizado",
+    FAILED: "falhou",
+    EXPIRED: "expirado",
+    CANCELLED: "cancelado",
+    REFUNDED: "estornado",
+    PARTIALLY_REFUNDED: "estorno parcial",
+    CHARGEBACK: "contestado",
+  };
+  return `${methodName[method] ?? method} · ${statusName[status] ?? status}`;
+}
+
 function OrderDetailDialog({
   summary,
   detail,

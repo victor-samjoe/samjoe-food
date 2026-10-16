@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import type { Database, TransactionalDatabase } from './catalog.js';
 import { resolveSession } from './auth.js';
 import { HttpError } from './errors.js';
+import { getSalesEngineConfig, saveSalesEngineConfig } from './sales-engine-webhook.js';
 
 type StoreSlugParams = { storeSlug: string };
 type ProductIdParams = { productId: string };
@@ -15,6 +16,9 @@ type AdminProductRow = {
   is_active: boolean;
   is_archived: boolean;
   cover_image_url: string | null;
+  cover_image_scale: number | string | null;
+  cover_image_position_x: number | null;
+  cover_image_position_y: number | null;
   category_id: string | null;
   category_name: string | null;
   variant_id: string | null;
@@ -37,6 +41,7 @@ type StoreRow = {
   pickup_by_app_enabled?: boolean; pickup_scheduling_enabled?: boolean;
   cash_enabled?: boolean; card_on_site_enabled?: boolean;
   pix_enabled?: boolean; mercado_pago_enabled?: boolean;
+  pix_key?: string | null;
 };
 type DeliveryPricingRow = {
   id: string; version: string; base_fee_cents: number; included_meters: number;
@@ -73,7 +78,7 @@ export function registerCatalogAdminRoutes(app: FastifyInstance, database: Trans
     const { rows } = await database.query<StoreRow>(`
       SELECT id AS store_id,slug AS store_slug,name AS store_name,currency,timezone,status,origin_address,storefront_config,delivery_status,is_open,is_open_reason,business_hours,
         scheduled_delivery_enabled,pickup_in_person_enabled,pickup_by_app_enabled,pickup_scheduling_enabled,
-        cash_enabled,card_on_site_enabled,pix_enabled,mercado_pago_enabled
+        cash_enabled,card_on_site_enabled,pix_enabled,mercado_pago_enabled,pix_key
       FROM stores WHERE slug=$1 AND tenant_id=$2
     `, [request.params.storeSlug, session.tenant_id]);
     if (!rows[0]) throw new HttpError(404, 'store_not_found', 'Loja não encontrada.');
@@ -89,6 +94,7 @@ export function registerCatalogAdminRoutes(app: FastifyInstance, database: Trans
     pickup_by_app_enabled?: boolean; pickup_scheduling_enabled?: boolean;
     cash_enabled?: boolean; card_on_site_enabled?: boolean;
     pix_enabled?: boolean; mercado_pago_enabled?: boolean;
+    pix_key?: string | null;
   } }>('/v1/admin/stores/:storeSlug', {
     schema: { body: { type: 'object', additionalProperties: false, minProperties: 1, properties: {
       name: { type: 'string', minLength: 1, maxLength: 160 },
@@ -107,11 +113,13 @@ export function registerCatalogAdminRoutes(app: FastifyInstance, database: Trans
       card_on_site_enabled: { type: 'boolean' },
       pix_enabled: { type: 'boolean' },
       mercado_pago_enabled: { type: 'boolean' },
+      pix_key: { type: ['string', 'null'], maxLength: 100 },
       storefront_config: { type: 'object', additionalProperties: false, properties: {
         brand_subtitle: { type: 'string', maxLength: 120 },
         hero_eyebrow: { type: 'string', maxLength: 120 },
         hero_title: { type: 'string', maxLength: 180 },
         hero_description: { type: 'string', maxLength: 500 },
+        whatsapp_phone_e164: { type: 'string', maxLength: 16, pattern: '^(|\\+[1-9][0-9]{7,14})$' },
         primary_color: { type: 'string', pattern: '^#[0-9a-fA-F]{6}$' },
         accent_color: { type: 'string', pattern: '^#[0-9a-fA-F]{6}$' },
         background_color: { type: 'string', pattern: '^#[0-9a-fA-F]{6}$' },
@@ -163,12 +171,13 @@ export function registerCatalogAdminRoutes(app: FastifyInstance, database: Trans
     for (const col of ['scheduled_delivery_enabled','pickup_in_person_enabled','pickup_by_app_enabled','pickup_scheduling_enabled','cash_enabled','card_on_site_enabled','pix_enabled','mercado_pago_enabled'] as const) {
       if (request.body[col] !== undefined) sets.push(`${col}=$${values.push(request.body[col])}`);
     }
+    if (request.body.pix_key !== undefined) sets.push(`pix_key=$${values.push(request.body.pix_key)}`);
     sets.push('updated_at=now()');
     const { rows } = await database.query<StoreRow>(`
       UPDATE stores SET ${sets.join(',')} WHERE slug=$1 AND tenant_id=$2
       RETURNING id AS store_id,slug AS store_slug,name AS store_name,currency,timezone,status,origin_address,storefront_config,delivery_status,is_open,is_open_reason,business_hours,
         scheduled_delivery_enabled,pickup_in_person_enabled,pickup_by_app_enabled,pickup_scheduling_enabled,
-        cash_enabled,card_on_site_enabled,pix_enabled,mercado_pago_enabled
+        cash_enabled,card_on_site_enabled,pix_enabled,mercado_pago_enabled,pix_key
     `, values);
     if (!rows[0]) throw new HttpError(404, 'store_not_found', 'Loja não encontrada.');
     return { store: rows[0] };
@@ -288,6 +297,9 @@ export function registerCatalogAdminRoutes(app: FastifyInstance, database: Trans
         p.is_active,
         p.is_archived,
         p.cover_image_url,
+        p.cover_image_scale,
+        p.cover_image_position_x,
+        p.cover_image_position_y,
         c.id AS category_id,
         c.name AS category_name,
         v.id AS variant_id,
@@ -314,7 +326,7 @@ export function registerCatalogAdminRoutes(app: FastifyInstance, database: Trans
        AND ei.source = 'legacy-sheets'
       WHERE s.slug = $1 AND s.tenant_id = $2
         AND (p.is_archived = false OR $3::boolean)
-      ORDER BY p.name, v.name
+      ORDER BY COALESCE(c.sort_order, 2147483647), COALESCE(c.name, ''), p.name, v.name
     `, [request.params.storeSlug, session.tenant_id, request.query.include_archived === 'true']);
 
     if (rows.length === 0) {
@@ -328,6 +340,7 @@ export function registerCatalogAdminRoutes(app: FastifyInstance, database: Trans
     type ProductEntry = {
       id: string; name: string; description: string | null; is_active: boolean; is_archived: boolean;
       cover_image_url: string | null;
+      cover_image_scale: number; cover_image_position_x: number; cover_image_position_y: number;
       category: { id: string | null; name: string | null } | null; legacy_id: string | null; has_orders: boolean;
       variants: Array<{ id: string; sku: string; name: string; price_cents: number; currency: string; inventory_policy: string | null; is_active: boolean }>;
     };
@@ -339,6 +352,9 @@ export function registerCatalogAdminRoutes(app: FastifyInstance, database: Trans
           is_active: row.is_active,
           is_archived: row.is_archived,
           cover_image_url: row.cover_image_url ?? null,
+          cover_image_scale: Number(row.cover_image_scale ?? 1),
+          cover_image_position_x: row.cover_image_position_x ?? 50,
+          cover_image_position_y: row.cover_image_position_y ?? 50,
           category: row.category_id ? { id: row.category_id, name: row.category_name } : null,
           legacy_id: row.legacy_id,
           has_orders: row.has_orders ?? false,
@@ -357,7 +373,7 @@ export function registerCatalogAdminRoutes(app: FastifyInstance, database: Trans
     return { products: [...products.values()] };
   });
 
-  app.post<{ Params: StoreSlugParams; Body: { name: string; description?: string | null; category_id?: string | null; price_cents: number; sku: string; cover_image_url?: string | null } }>(
+  app.post<{ Params: StoreSlugParams; Body: { name: string; description?: string | null; category_id?: string | null; price_cents: number; sku: string; cover_image_url?: string | null; cover_image_scale?: number; cover_image_position_x?: number; cover_image_position_y?: number } }>(
     '/v1/admin/stores/:storeSlug/products',
     {
       schema: {
@@ -371,13 +387,20 @@ export function registerCatalogAdminRoutes(app: FastifyInstance, database: Trans
             price_cents: { type: 'integer', minimum: 0 },
             sku: { type: 'string', minLength: 1, maxLength: 80 },
             cover_image_url: { type: ['string', 'null'], maxLength: 750000 },
+            cover_image_scale: { type: 'number', minimum: 0.75, maximum: 2 },
+            cover_image_position_x: { type: 'integer', minimum: 0, maximum: 100 },
+            cover_image_position_y: { type: 'integer', minimum: 0, maximum: 100 },
           },
         },
       },
     },
     async (request, reply) => {
       const session = await requireOperator(request, database);
-      const { name, description = null, category_id = null, price_cents, sku, cover_image_url = null } = request.body;
+      const {
+        name, description = null, category_id = null, price_cents, sku,
+        cover_image_url = null, cover_image_scale = 1,
+        cover_image_position_x = 50, cover_image_position_y = 50,
+      } = request.body;
 
       return database.transaction(async (tx) => {
         const { rows: storeRows } = await tx.query<{ store_id: string; currency: string }>(
@@ -397,9 +420,16 @@ export function registerCatalogAdminRoutes(app: FastifyInstance, database: Trans
         }
 
         const { rows: productRows } = await tx.query<{ product_id: string }>(
-          `INSERT INTO products (tenant_id, store_id, category_id, name, description, cover_image_url)
-           VALUES ($1, $2, $3, $4, $5, $6) RETURNING id AS product_id`,
-          [session.tenant_id, store_id, category_id, name, description, cover_image_url],
+          `INSERT INTO products (
+             tenant_id, store_id, category_id, name, description, cover_image_url,
+             cover_image_scale, cover_image_position_x, cover_image_position_y
+           ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+           RETURNING id AS product_id`,
+          [
+            session.tenant_id, store_id, category_id, name, description,
+            cover_image_url, cover_image_scale, cover_image_position_x,
+            cover_image_position_y,
+          ],
         );
         const product_id = productRows[0]?.product_id;
         if (!product_id) throw new HttpError(500, 'internal_error', 'Erro ao criar produto.');
@@ -417,7 +447,7 @@ export function registerCatalogAdminRoutes(app: FastifyInstance, database: Trans
     },
   );
 
-  app.patch<{ Params: ProductIdParams; Body: { name?: string; description?: string | null; category_id?: string | null; is_active?: boolean; is_archived?: boolean; cover_image_url?: string | null } }>(
+  app.patch<{ Params: ProductIdParams; Body: { name?: string; description?: string | null; category_id?: string | null; is_active?: boolean; is_archived?: boolean; cover_image_url?: string | null; cover_image_scale?: number; cover_image_position_x?: number; cover_image_position_y?: number } }>(
     '/v1/admin/products/:productId',
     {
       schema: {
@@ -430,13 +460,19 @@ export function registerCatalogAdminRoutes(app: FastifyInstance, database: Trans
             is_active: { type: 'boolean' },
             is_archived: { type: 'boolean' },
             cover_image_url: { type: ['string', 'null'], maxLength: 750000 },
+            cover_image_scale: { type: 'number', minimum: 0.75, maximum: 2 },
+            cover_image_position_x: { type: 'integer', minimum: 0, maximum: 100 },
+            cover_image_position_y: { type: 'integer', minimum: 0, maximum: 100 },
           },
         },
       },
     },
     async (request, reply) => {
       const session = await requireOperator(request, database);
-      const { name, description, is_active, is_archived, cover_image_url } = request.body;
+      const {
+        name, description, is_active, is_archived, cover_image_url,
+        cover_image_scale, cover_image_position_x, cover_image_position_y,
+      } = request.body;
 
       if (request.body.category_id) {
         const { rows } = await database.query(
@@ -460,6 +496,9 @@ export function registerCatalogAdminRoutes(app: FastifyInstance, database: Trans
         if (is_archived && is_active === undefined) sets.push('is_active = false');
       }
       if (cover_image_url !== undefined) { sets.push(`cover_image_url = $${values.push(cover_image_url)}`); }
+      if (cover_image_scale !== undefined) { sets.push(`cover_image_scale = $${values.push(cover_image_scale)}`); }
+      if (cover_image_position_x !== undefined) { sets.push(`cover_image_position_x = $${values.push(cover_image_position_x)}`); }
+      if (cover_image_position_y !== undefined) { sets.push(`cover_image_position_y = $${values.push(cover_image_position_y)}`); }
       if (sets.length === 0) throw new HttpError(400, 'no_fields', 'Nenhum campo para atualizar.');
 
       sets.push(`updated_at = now()`);
@@ -686,6 +725,176 @@ export function registerCatalogAdminRoutes(app: FastifyInstance, database: Trans
         if (!updated.rows[0]) throw new HttpError(404, 'category_not_found', 'Categoria não encontrada.');
         return { category_id: updated.rows[0].category_id };
       });
+    },
+  );
+
+  // ── Domains ──────────────────────────────────────────────────────────────
+
+  type DomainIdParams = StoreSlugParams & { domainId: string };
+  type DomainRow = {
+    id: string; hostname: string; is_primary: boolean;
+    status: string; verification_token: string | null;
+    verified_at: string | null; created_at: string;
+  };
+
+  async function requireStoreId(storeSlug: string, tenantId: string) {
+    const { rows } = await database.query<{ store_id: string }>(
+      `SELECT id AS store_id FROM stores WHERE slug=$1 AND tenant_id=$2`,
+      [storeSlug, tenantId],
+    );
+    if (!rows[0]) throw new HttpError(404, 'store_not_found', 'Loja não encontrada.');
+    return rows[0].store_id;
+  }
+
+  app.get<{ Params: StoreSlugParams }>(
+    '/v1/admin/stores/:storeSlug/domains',
+    async (request) => {
+      const session = await requireOperator(request, database);
+      const storeId = await requireStoreId(request.params.storeSlug, session.tenant_id);
+      const { rows } = await database.query<DomainRow>(
+        `SELECT id, hostname, is_primary, status, verification_token, verified_at, created_at
+         FROM store_domains WHERE tenant_id=$1 AND store_id=$2 ORDER BY created_at`,
+        [session.tenant_id, storeId],
+      );
+      return { domains: rows };
+    },
+  );
+
+  app.post<{ Params: StoreSlugParams; Body: { hostname: string } }>(
+    '/v1/admin/stores/:storeSlug/domains',
+    {
+      schema: {
+        body: {
+          type: 'object', additionalProperties: false, required: ['hostname'],
+          properties: { hostname: { type: 'string', minLength: 3, maxLength: 253 } },
+        },
+      },
+    },
+    async (request, reply) => {
+      const session = await requireOperator(request, database);
+      const storeId = await requireStoreId(request.params.storeSlug, session.tenant_id);
+      const hostname = request.body.hostname.toLowerCase().trim().replace(/^https?:\/\//, '').replace(/\/.*$/, '');
+      if (!/^[a-z0-9]([a-z0-9\-\.]*[a-z0-9])?$/.test(hostname)) {
+        throw new HttpError(400, 'invalid_hostname', 'Hostname inválido.');
+      }
+      const token = crypto.randomUUID().replace(/-/g, '');
+      const { rows } = await database.query<DomainRow>(
+        `INSERT INTO store_domains (tenant_id, store_id, hostname, status, verification_token)
+         VALUES ($1, $2, $3, 'PENDING', $4)
+         RETURNING id, hostname, is_primary, status, verification_token, verified_at, created_at`,
+        [session.tenant_id, storeId, hostname, token],
+      );
+      return reply.status(201).send({ domain: rows[0] });
+    },
+  );
+
+  app.delete<{ Params: DomainIdParams }>(
+    '/v1/admin/stores/:storeSlug/domains/:domainId',
+    async (request, reply) => {
+      const session = await requireOperator(request, database);
+      const storeId = await requireStoreId(request.params.storeSlug, session.tenant_id);
+      const { rows } = await database.query(
+        `DELETE FROM store_domains WHERE id=$1 AND tenant_id=$2 AND store_id=$3 RETURNING id`,
+        [request.params.domainId, session.tenant_id, storeId],
+      );
+      if (!rows[0]) throw new HttpError(404, 'domain_not_found', 'Domínio não encontrado.');
+      return reply.status(204).send();
+    },
+  );
+
+  app.post<{ Params: DomainIdParams }>(
+    '/v1/admin/stores/:storeSlug/domains/:domainId/verify',
+    async (request, reply) => {
+      const session = await requireOperator(request, database);
+      const storeId = await requireStoreId(request.params.storeSlug, session.tenant_id);
+      const { rows: domainRows } = await database.query<{ hostname: string; verification_token: string | null; status: string }>(
+        `SELECT hostname, verification_token, status FROM store_domains WHERE id=$1 AND tenant_id=$2 AND store_id=$3`,
+        [request.params.domainId, session.tenant_id, storeId],
+      );
+      if (!domainRows[0]) throw new HttpError(404, 'domain_not_found', 'Domínio não encontrado.');
+      const { hostname, verification_token, status } = domainRows[0];
+      if (status === 'VERIFIED') return { verified: true, message: 'Domínio já verificado.' };
+
+      // Check DNS TXT record via Cloudflare DoH
+      const dnsName = `_samjoe-verify.${hostname}`;
+      let found = false;
+      try {
+        const doh = await fetch(
+          `https://cloudflare-dns.com/dns-query?name=${encodeURIComponent(dnsName)}&type=TXT`,
+          { headers: { Accept: 'application/dns-json' } },
+        );
+        const data = await doh.json() as { Answer?: Array<{ data: string }> };
+        const expected = `samjoe-verify=${verification_token}`;
+        found = (data.Answer ?? []).some((rec) => rec.data.replace(/"/g, '') === expected);
+      } catch {
+        throw new HttpError(502, 'dns_check_failed', 'Não foi possível verificar o DNS. Tente novamente.');
+      }
+
+      if (!found) {
+        return reply.status(422).send({
+          error: { code: 'txt_not_found', message: 'Registro TXT ainda não encontrado. Aguarde a propagação do DNS (até 48h).' },
+        });
+      }
+
+      await database.query(
+        `UPDATE store_domains SET status='VERIFIED', verified_at=now(), updated_at=now() WHERE id=$1 AND tenant_id=$2`,
+        [request.params.domainId, session.tenant_id],
+      );
+      return { verified: true, message: 'Domínio verificado com sucesso.' };
+    },
+  );
+
+  app.patch<{ Params: DomainIdParams }>(
+    '/v1/admin/stores/:storeSlug/domains/:domainId/primary',
+    async (request) => {
+      const session = await requireOperator(request, database);
+      const storeId = await requireStoreId(request.params.storeSlug, session.tenant_id);
+      const { rows } = await database.query<{ status: string }>(
+        `SELECT status FROM store_domains WHERE id=$1 AND tenant_id=$2 AND store_id=$3`,
+        [request.params.domainId, session.tenant_id, storeId],
+      );
+      if (!rows[0]) throw new HttpError(404, 'domain_not_found', 'Domínio não encontrado.');
+      if (rows[0].status !== 'VERIFIED') throw new HttpError(422, 'domain_not_verified', 'Apenas domínios verificados podem ser primários.');
+      await database.query(
+        `UPDATE store_domains SET is_primary=false, updated_at=now() WHERE tenant_id=$1 AND store_id=$2`,
+        [session.tenant_id, storeId],
+      );
+      await database.query(
+        `UPDATE store_domains SET is_primary=true, updated_at=now() WHERE id=$1 AND tenant_id=$2`,
+        [request.params.domainId, session.tenant_id],
+      );
+      return { ok: true };
+    },
+  );
+
+  app.put<{ Body: { webhookUrl?: string; hmacSecret?: string } }>(
+    '/v1/admin/webhook-config',
+    {
+      schema: {
+        body: {
+          type: 'object', additionalProperties: true,
+          properties: {
+            webhookUrl: { type: 'string', maxLength: 1000 },
+            hmacSecret: { type: 'string', maxLength: 200 },
+          },
+        },
+      },
+    },
+    async (request) => {
+      const { webhookUrl, hmacSecret } = request.body;
+      if (!webhookUrl || !hmacSecret) {
+        throw new HttpError(400, 'invalid_body', 'webhookUrl e hmacSecret são obrigatórios.');
+      }
+      // Get the first active tenant (single-tenant per FoodApp deployment)
+      const { rows } = await database.query<{ id: string }>(
+        `SELECT id FROM tenants WHERE status = 'ACTIVE' ORDER BY created_at LIMIT 1`,
+      );
+      const tenantId = rows[0]?.id;
+      if (!tenantId) throw new HttpError(404, 'tenant_not_found', 'Tenant não encontrado.');
+
+      const existing = await getSalesEngineConfig(database, tenantId);
+      await saveSalesEngineConfig(database, tenantId, { webhookUrl, hmacSecret });
+      return { ok: true, updated: !!existing };
     },
   );
 }
