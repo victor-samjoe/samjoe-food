@@ -1133,6 +1133,17 @@ export default function AdminPage() {
       "Produto excluído.",
     );
   }
+  async function purgeCatalog() {
+    if (!store) return;
+    await run('purge-catalog', async () => {
+      await fetch('/api/admin/purge-catalog', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ storeSlug: store.store_slug }),
+      });
+    }, 'Cache da vitrine limpo.', true);
+  }
+
   async function toggleStoreOpen() {
     if (!store) return;
     const newIsOpen = !(store.is_open ?? true);
@@ -1682,6 +1693,15 @@ export default function AdminPage() {
           </div>
           <div className={styles.topActions}>
             <button onClick={() => void loadAll(token)}>↻ Atualizar</button>
+            {store && (
+              <button
+                onClick={() => void purgeCatalog()}
+                disabled={busy === 'purge-catalog'}
+                title="Força atualização imediata da vitrine"
+              >
+                {busy === 'purge-catalog' ? 'Limpando…' : '🗑 Cache'}
+              </button>
+            )}
             {store && (
               <div className={styles.storeStatusControl}>
                 <button

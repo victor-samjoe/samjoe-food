@@ -7,6 +7,7 @@ const EXTERNAL_API = process.env.API_INTERNAL_URL
 type CacheLike = {
   match(request: Request): Promise<Response | undefined>;
   put(request: Request, response: Response): Promise<void>;
+  delete(request: Request): Promise<boolean>;
 };
 
 const catalogRequests = new Map<string, Promise<Response>>();
@@ -47,6 +48,13 @@ async function cachedCatalog(connectionString: string, path: string, request: Re
   }
 }
 
+export async function purgeCatalogCache(storeSlug: string, requestUrl: string): Promise<void> {
+  const cache = runtimeCache();
+  if (!cache) return;
+  const catalogUrl = new URL(`/api/store/${encodeURIComponent(storeSlug)}/catalog`, requestUrl).toString();
+  await cache.delete(new Request(catalogUrl, { method: 'GET' })).catch(() => undefined);
+}
+
 export async function forwardFoodApi(request: Request, path: string) {
   let connectionString = process.env.DATABASE_URL;
   if (!connectionString) {
@@ -66,7 +74,14 @@ export async function forwardFoodApi(request: Request, path: string) {
     if (request.method === 'GET' && path.endsWith('/catalog')) {
       return cachedCatalog(connectionString, path, request);
     }
-    return injectLocalApi(connectionString, path, request);
+    const response = await injectLocalApi(connectionString, path, request);
+    if (!['GET', 'HEAD'].includes(request.method) && response.ok) {
+      const slugMatch = path.match(/^\/v1\/(?:admin\/)?stores\/([^/]+)/);
+      if (slugMatch?.[1]) {
+        await purgeCatalogCache(slugMatch[1], request.url);
+      }
+    }
+    return response;
   }
 
   const sourceUrl = new URL(request.url);
