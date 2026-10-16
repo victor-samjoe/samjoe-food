@@ -37,8 +37,10 @@ type StoreRow = {
   timezone?: string; status?: string; origin_address?: Record<string, unknown> | null;
   storefront_config?: Record<string, unknown>; delivery_status?: 'PENDING' | 'ACTIVE';
   is_open?: boolean; is_open_reason?: string | null; business_hours?: Record<string, unknown> | null;
+  delivery_immediate_enabled?: boolean;
   scheduled_delivery_enabled?: boolean; pickup_in_person_enabled?: boolean;
   pickup_by_app_enabled?: boolean; pickup_scheduling_enabled?: boolean;
+  pickup_schedule_enabled?: boolean; pickup_schedule?: Array<{ date: string; from: string; to: string }> | null;
   cash_enabled?: boolean; card_on_site_enabled?: boolean;
   pix_enabled?: boolean; mercado_pago_enabled?: boolean;
   pix_key?: string | null;
@@ -77,7 +79,8 @@ export function registerCatalogAdminRoutes(app: FastifyInstance, database: Trans
     const session = await requireOperator(request, database);
     const { rows } = await database.query<StoreRow>(`
       SELECT id AS store_id,slug AS store_slug,name AS store_name,currency,timezone,status,origin_address,storefront_config,delivery_status,is_open,is_open_reason,business_hours,
-        scheduled_delivery_enabled,pickup_in_person_enabled,pickup_by_app_enabled,pickup_scheduling_enabled,
+        delivery_immediate_enabled,scheduled_delivery_enabled,pickup_in_person_enabled,pickup_by_app_enabled,pickup_scheduling_enabled,
+        pickup_schedule_enabled,pickup_schedule,
         cash_enabled,card_on_site_enabled,pix_enabled,mercado_pago_enabled,pix_key
       FROM stores WHERE slug=$1 AND tenant_id=$2
     `, [request.params.storeSlug, session.tenant_id]);
@@ -90,8 +93,10 @@ export function registerCatalogAdminRoutes(app: FastifyInstance, database: Trans
     origin_address?: Record<string, unknown> | null;
     storefront_config?: Record<string, unknown>;
     is_open?: boolean; is_open_reason?: string | null; business_hours?: Record<string, unknown> | null;
-    scheduled_delivery_enabled?: boolean; pickup_in_person_enabled?: boolean;
+    delivery_immediate_enabled?: boolean; scheduled_delivery_enabled?: boolean; pickup_in_person_enabled?: boolean;
     pickup_by_app_enabled?: boolean; pickup_scheduling_enabled?: boolean;
+    pickup_schedule_enabled?: boolean;
+    pickup_schedule?: Array<{ date: string; from: string; to: string }> | null;
     cash_enabled?: boolean; card_on_site_enabled?: boolean;
     pix_enabled?: boolean; mercado_pago_enabled?: boolean;
     pix_key?: string | null;
@@ -105,10 +110,20 @@ export function registerCatalogAdminRoutes(app: FastifyInstance, database: Trans
       is_open_reason: { type: ['string', 'null'], maxLength: 255 },
       business_hours: { anyOf: [{ type: 'object' }, { type: 'null' }] },
       origin_address: { anyOf: [{ $ref: 'address#' }, { type: 'null' }] },
+      delivery_immediate_enabled: { type: 'boolean' },
       scheduled_delivery_enabled: { type: 'boolean' },
       pickup_in_person_enabled: { type: 'boolean' },
       pickup_by_app_enabled: { type: 'boolean' },
       pickup_scheduling_enabled: { type: 'boolean' },
+      pickup_schedule_enabled: { type: 'boolean' },
+      pickup_schedule: { anyOf: [
+        { type: 'array', maxItems: 60, items: { type: 'object', additionalProperties: false, required: ['date','from','to'], properties: {
+          date: { type: 'string', pattern: '^\\d{4}-\\d{2}-\\d{2}$' },
+          from: { type: 'string', pattern: '^\\d{2}:\\d{2}$' },
+          to:   { type: 'string', pattern: '^\\d{2}:\\d{2}$' },
+        } } },
+        { type: 'null' },
+      ] },
       cash_enabled: { type: 'boolean' },
       card_on_site_enabled: { type: 'boolean' },
       pix_enabled: { type: 'boolean' },
@@ -177,15 +192,17 @@ export function registerCatalogAdminRoutes(app: FastifyInstance, database: Trans
         THEN 'ACTIVE' ELSE 'PENDING' END`);
     }
     if (request.body.storefront_config !== undefined) sets.push(`storefront_config=$${values.push(JSON.stringify(request.body.storefront_config))}::jsonb`);
-    for (const col of ['scheduled_delivery_enabled','pickup_in_person_enabled','pickup_by_app_enabled','pickup_scheduling_enabled','cash_enabled','card_on_site_enabled','pix_enabled','mercado_pago_enabled'] as const) {
+    for (const col of ['delivery_immediate_enabled','scheduled_delivery_enabled','pickup_in_person_enabled','pickup_by_app_enabled','pickup_scheduling_enabled','pickup_schedule_enabled','cash_enabled','card_on_site_enabled','pix_enabled','mercado_pago_enabled'] as const) {
       if (request.body[col] !== undefined) sets.push(`${col}=$${values.push(request.body[col])}`);
     }
+    if (request.body.pickup_schedule !== undefined) sets.push(`pickup_schedule=$${values.push(request.body.pickup_schedule !== null ? JSON.stringify(request.body.pickup_schedule) : null)}${request.body.pickup_schedule !== null ? '::jsonb' : ''}`);
     if (request.body.pix_key !== undefined) sets.push(`pix_key=$${values.push(request.body.pix_key)}`);
     sets.push('updated_at=now()');
     const { rows } = await database.query<StoreRow>(`
       UPDATE stores SET ${sets.join(',')} WHERE slug=$1 AND tenant_id=$2
       RETURNING id AS store_id,slug AS store_slug,name AS store_name,currency,timezone,status,origin_address,storefront_config,delivery_status,is_open,is_open_reason,business_hours,
-        scheduled_delivery_enabled,pickup_in_person_enabled,pickup_by_app_enabled,pickup_scheduling_enabled,
+        delivery_immediate_enabled,scheduled_delivery_enabled,pickup_in_person_enabled,pickup_by_app_enabled,pickup_scheduling_enabled,
+        pickup_schedule_enabled,pickup_schedule,
         cash_enabled,card_on_site_enabled,pix_enabled,mercado_pago_enabled,pix_key
     `, values);
     if (!rows[0]) throw new HttpError(404, 'store_not_found', 'Loja não encontrada.');
